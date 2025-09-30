@@ -24,6 +24,19 @@
 #include <string>
 #include <fstream> // C++のファイルストリームを使用
 
+enum class DiffPatternType
+{
+    AbsDiff,        // 絶対値差分
+    ColorMask,      // 違う部分を緑
+    OverlayTemplate // 違う部分は緑、同じ部分はテンプレ画像
+};
+
+struct DiffPattern
+{
+    DiffPatternType type;
+    DiffPattern(DiffPatternType t) : type(t) {}
+};
+
 void setWindowIconFromExe(GLFWwindow *window)
 {
     HWND hwnd = glfwGetWin32Window(window);
@@ -68,6 +81,12 @@ static int pixel_y = 358;
 
 static float UpdateSpeed = 4.0f;
 
+static bool isLinkZoom = false;
+
+static DiffPattern diffPattern(DiffPatternType::AbsDiff);
+
+static ImVec4 MaskColor = ImVec4(0, 1, 0, 1);
+
 static std::string szFile = "template.png";
 char szFileBuffer[MAX_PATH] = {0};
 
@@ -97,7 +116,14 @@ void SaveAppSettings()
     ofs << "pixel_x=" << pixel_x << std::endl;
     ofs << "pixel_y=" << pixel_y << std::endl;
     ofs << "UpdateSpeed=" << UpdateSpeed << std::endl;
-
+    ofs << "isLinkZoom=" << isLinkZoom << std::endl;
+    // 差分形式
+    ofs << "diffPattern=" << static_cast<int>(diffPattern.type) << std::endl;
+    ofs << "MaskColor="
+        << MaskColor.x << ","
+        << MaskColor.y << ","
+        << MaskColor.z << ","
+        << MaskColor.w << std::endl;
     // パス
     ofs << "path=" << szFile << std::endl;
 
@@ -146,6 +172,14 @@ void LoadAppSettings()
                 pixel_y = std::stoi(val);
             else if (key == "UpdateSpeed")
                 UpdateSpeed = std::stof(val);
+            else if (key == "isLinkZoom")
+                isLinkZoom = (std::stoi(val) != 0);
+            else if (key == "diffPattern")
+                diffPattern = DiffPattern(static_cast<DiffPatternType>(std::stoi(val)));
+            else if (key == "MaskColor")
+            {
+                sscanf_s(val.c_str(), "%f,%f,%f,%f", &MaskColor.x, &MaskColor.y, &MaskColor.z, &MaskColor.w);
+            }
             else if (key == "path")
                 szFile = val;
         }
@@ -188,7 +222,11 @@ void ensureBGRA(cv::Mat &img)
         cv::cvtColor(img, img, COLOR_BGR2BGRA);
 }
 
-std::tuple<cv::Mat, int, int> imageDifferenceSafe(const cv::Mat &img1, const cv::Mat &img2)
+// 拡張版
+std::tuple<cv::Mat, int, int> imageDifferenceSafe(
+    const cv::Mat &img1,
+    const cv::Mat &img2,
+    const DiffPattern &pattern)
 {
     if (img1.empty() || img2.empty())
         return {cv::Mat(), 0, 0};
@@ -203,22 +241,6 @@ std::tuple<cv::Mat, int, int> imageDifferenceSafe(const cv::Mat &img1, const cv:
     cv::Mat roi1 = img1(roi);
     cv::Mat roi2 = img2(roi);
 
-    // 差分（RGB絶対値）
-    cv::Mat rgbDiff;
-    if (roi1.channels() >= 3 && roi2.channels() >= 3)
-    {
-        std::vector<cv::Mat> ch1, ch2, chDiff(3);
-        cv::split(roi1, ch1);
-        cv::split(roi2, ch2);
-        for (int i = 0; i < 3; ++i)
-            cv::absdiff(ch1[i], ch2[i], chDiff[i]);
-        cv::merge(chDiff, rgbDiff);
-    }
-    else
-    {
-        cv::absdiff(roi1, roi2, rgbDiff);
-    }
-
     // アルファチャンネル
     cv::Mat alpha;
     if (roi1.channels() == 4)
@@ -226,36 +248,61 @@ std::tuple<cv::Mat, int, int> imageDifferenceSafe(const cv::Mat &img1, const cv:
     else
         alpha = cv::Mat::ones(roi.size(), CV_8U) * 255;
 
-    // RGBAにマージ
-    cv::Mat merged;
-    std::vector<cv::Mat> ch;
-    cv::split(rgbDiff, ch);
-    ch.push_back(alpha);
-    cv::merge(ch, merged);
-
-    merged.copyTo(diffImage(roi));
-
-    // マスク作成：元画像の不透明ピクセル
-    cv::Mat opaqueMask = alpha > 0;
-
-    // 「間違いピクセル」のカウント
+    // 差分計算
+    cv::Mat merged = cv::Mat::zeros(roi.size(), CV_8UC4);
     int changedPixels = 0;
+
     for (int y = 0; y < h; ++y)
     {
         const cv::Vec4b *p1 = roi1.ptr<cv::Vec4b>(y);
         const cv::Vec4b *p2 = roi2.ptr<cv::Vec4b>(y);
-        const uchar *maskPtr = opaqueMask.ptr<uchar>(y);
+        const uchar *maskPtr = alpha.ptr<uchar>(y);
+        cv::Vec4b *dst = merged.ptr<cv::Vec4b>(y);
+
         for (int x = 0; x < w; ++x)
         {
-            if (maskPtr[x])
+            if (!maskPtr[x])
+                continue;
+
+            bool changed = (p1[x] != p2[x]);
+            if (changed)
+                changedPixels++;
+
+            switch (pattern.type)
             {
-                if (p1[x] != p2[x])
-                    changedPixels++;
+            case DiffPatternType::AbsDiff:
+                for (int c = 0; c < 3; ++c)
+                    dst[x][c] = std::abs(p1[x][c] - p2[x][c]);
+                dst[x][3] = 255;
+                break;
+
+            case DiffPatternType::ColorMask:
+                dst[x] = changed ? cv::Vec4b(
+                                       (uchar)(MaskColor.z * 255),
+                                       (uchar)(MaskColor.y * 255),
+                                       (uchar)(MaskColor.x * 255),
+                                       (uchar)(MaskColor.w * 255))
+                                 : cv::Vec4b(0, 0, 0, 255);
+                break;
+
+            case DiffPatternType::OverlayTemplate:
+                if (changed)
+                    dst[x] = cv::Vec4b(
+                        (uchar)(MaskColor.z * 255),
+                        (uchar)(MaskColor.y * 255),
+                        (uchar)(MaskColor.x * 255),
+                        (uchar)(MaskColor.w * 255));
+                else if (!img1.empty())
+                    dst[x] = img1.at<cv::Vec4b>(y, x);
+                else
+                    dst[x] = p1[x];
+                break;
             }
         }
     }
 
-    int totalOpaquePixels = cv::countNonZero(opaqueMask);
+    merged.copyTo(diffImage(roi));
+    int totalOpaquePixels = cv::countNonZero(alpha);
     return {diffImage, totalOpaquePixels, changedPixels};
 }
 
@@ -482,6 +529,9 @@ int main()
     static int tmpPixel_x = pixel_x;
     static int tmpPixel_y = pixel_y;
     static float tmpUpdateSpeed = UpdateSpeed;
+    static bool tmpIsLinkZoom = isLinkZoom;
+    static DiffPattern tmpDiffPattern = diffPattern;
+    static ImVec4 tmpMaskColor = MaskColor;
 
     double diffPercent = 0.0;
     int totalOpaquePixels = 0;
@@ -513,7 +563,7 @@ int main()
                 newImg = applyAlphaMask(newImg, originalImg);
                 std::lock_guard<std::mutex> lock(imgMutex);
                 realtimeImg = newImg.clone();
-                auto [diffImg, totalOpaque, changed] = imageDifferenceSafe(originalImg, realtimeImg);
+                auto [diffImg, totalOpaque, changed] = imageDifferenceSafe(originalImg, realtimeImg, diffPattern);
                 diffPercent = (totalOpaque > 0) ? (double)changed / totalOpaque * 100.0 : 0.0;
                 totalOpaquePixels = totalOpaque;
                 changedPixels = changed;
@@ -578,12 +628,25 @@ int main()
                 OriginalOrigin.y = uv0.y + (uv1.y - uv0.y) * (relativeMouse.y / winSize.y);
 
                 if (io.MouseWheel > 0)
+                {
                     ApplyZoom(uv0, uv1, OriginalOrigin, ZoomDir::ZoomOut);
+                    if (isLinkZoom)
+                    {
+                        ApplyZoom(RealtimeUV0, RealtimeUV1, OriginalOrigin, ZoomDir::ZoomOut);
+                        ApplyZoom(DiffUV0, DiffUV1, OriginalOrigin, ZoomDir::ZoomOut);
+                    }
+                }
                 else if (io.MouseWheel < 0)
+                {
                     ApplyZoom(uv0, uv1, OriginalOrigin, ZoomDir::ZoomIn);
+                    if (isLinkZoom)
+                    {
+                        ApplyZoom(RealtimeUV0, RealtimeUV1, OriginalOrigin, ZoomDir::ZoomIn);
+                        ApplyZoom(DiffUV0, DiffUV1, OriginalOrigin, ZoomDir::ZoomIn);
+                    }
+                }
                 if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                 {
-
                     if (!isPanning)
                     {
                         isPanning = true;
@@ -596,6 +659,17 @@ int main()
                     uv1.x -= delta.x;
                     uv0.y -= delta.y;
                     uv1.y -= delta.y;
+                    if (isLinkZoom)
+                    {
+                        RealtimeUV0.x -= delta.x;
+                        RealtimeUV1.x -= delta.x;
+                        RealtimeUV0.y -= delta.y;
+                        RealtimeUV1.y -= delta.y;
+                        DiffUV0.x -= delta.x;
+                        DiffUV1.x -= delta.x;
+                        DiffUV0.y -= delta.y;
+                        DiffUV1.y -= delta.y;
+                    }
                     lastMouse = mousePos;
                 }
                 else
@@ -608,11 +682,13 @@ int main()
                 // UVを初期状態に戻す
                 uv0 = ImVec2(0, 0);
                 uv1 = ImVec2(1, 1);
-
-                // 縦横比補正
-                float imgAspect = (float)width / height;
-                ImVec2 winSize = ImGui::GetContentRegionAvail();
-                float winAspect = winSize.x / winSize.y;
+                if (isLinkZoom)
+                {
+                    RealtimeUV0 = ImVec2(0, 0);
+                    RealtimeUV1 = ImVec2(1, 1);
+                    DiffUV0 = ImVec2(0, 0);
+                    DiffUV1 = ImVec2(1, 1);
+                }
                 CalcUVForAspect(imgAspect, winAspect, uv0, uv1);
             }
 
@@ -645,10 +721,23 @@ int main()
                 RealtimeOrigin.y = uv0.y + (uv1.y - uv0.y) * (relativeMouse.y / winSize.y);
 
                 if (io.MouseWheel > 0)
+                {
                     ApplyZoom(uv0, uv1, RealtimeOrigin, ZoomDir::ZoomOut);
+                    if (isLinkZoom)
+                    {
+                        ApplyZoom(OriginalUV0, OriginalUV1, RealtimeOrigin, ZoomDir::ZoomOut);
+                        ApplyZoom(DiffUV0, DiffUV1, RealtimeOrigin, ZoomDir::ZoomOut);
+                    }
+                }
                 else if (io.MouseWheel < 0)
+                {
                     ApplyZoom(uv0, uv1, RealtimeOrigin, ZoomDir::ZoomIn);
-
+                    if (isLinkZoom)
+                    {
+                        ApplyZoom(OriginalUV0, OriginalUV1, RealtimeOrigin, ZoomDir::ZoomIn);
+                        ApplyZoom(DiffUV0, DiffUV1, RealtimeOrigin, ZoomDir::ZoomIn);
+                    }
+                }
                 if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                 {
                     if (!isPanningRealtime)
@@ -663,6 +752,17 @@ int main()
                     uv1.x -= delta.x;
                     uv0.y -= delta.y;
                     uv1.y -= delta.y;
+                    if (isLinkZoom)
+                    {
+                        OriginalUV0.x -= delta.x;
+                        OriginalUV1.x -= delta.x;
+                        OriginalUV0.y -= delta.y;
+                        OriginalUV1.y -= delta.y;
+                        DiffUV0.x -= delta.x;
+                        DiffUV1.x -= delta.x;
+                        DiffUV0.y -= delta.y;
+                        DiffUV1.y -= delta.y;
+                    }
                     lastMouseRealtime = mousePos;
                 }
                 else
@@ -675,6 +775,13 @@ int main()
             {
                 uv0 = ImVec2(0, 0);
                 uv1 = ImVec2(1, 1);
+                if (isLinkZoom)
+                {
+                    OriginalUV0 = ImVec2(0, 0);
+                    OriginalUV1 = ImVec2(1, 1);
+                    DiffUV0 = ImVec2(0, 0);
+                    DiffUV1 = ImVec2(1, 1);
+                }
                 CalcUVForAspect(imgAspect, winAspect, uv0, uv1);
             }
 
@@ -706,9 +813,23 @@ int main()
                 DiffOrigin.y = uv0.y + (uv1.y - uv0.y) * (relativeMouse.y / winSize.y);
 
                 if (io.MouseWheel > 0)
+                {
                     ApplyZoom(uv0, uv1, DiffOrigin, ZoomDir::ZoomOut);
+                    if (isLinkZoom)
+                    {
+                        ApplyZoom(RealtimeUV0, RealtimeUV1, DiffOrigin, ZoomDir::ZoomOut);
+                        ApplyZoom(OriginalUV0, OriginalUV1, DiffOrigin, ZoomDir::ZoomOut);
+                    }
+                }
                 else if (io.MouseWheel < 0)
+                {
                     ApplyZoom(uv0, uv1, DiffOrigin, ZoomDir::ZoomIn);
+                    if (isLinkZoom)
+                    {
+                        ApplyZoom(RealtimeUV0, RealtimeUV1, DiffOrigin, ZoomDir::ZoomIn);
+                        ApplyZoom(OriginalUV0, OriginalUV1, DiffOrigin, ZoomDir::ZoomIn);
+                    }
+                }
 
                 if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                 {
@@ -724,6 +845,17 @@ int main()
                     uv1.x -= delta.x;
                     uv0.y -= delta.y;
                     uv1.y -= delta.y;
+                    if (isLinkZoom)
+                    {
+                        RealtimeUV0.x -= delta.x;
+                        RealtimeUV1.x -= delta.x;
+                        RealtimeUV0.y -= delta.y;
+                        RealtimeUV1.y -= delta.y;
+                        OriginalUV0.x -= delta.x;
+                        OriginalUV1.x -= delta.x;
+                        OriginalUV0.y -= delta.y;
+                        OriginalUV1.y -= delta.y;
+                    }
                     lastMouseDiff = mousePos;
                 }
                 else
@@ -736,6 +868,13 @@ int main()
             {
                 uv0 = ImVec2(0, 0);
                 uv1 = ImVec2(1, 1);
+                if (isLinkZoom)
+                {
+                    RealtimeUV0 = ImVec2(0, 0);
+                    RealtimeUV1 = ImVec2(1, 1);
+                    OriginalUV0 = ImVec2(0, 0);
+                    OriginalUV1 = ImVec2(1, 1);
+                }
                 CalcUVForAspect(imgAspect, winAspect, uv0, uv1);
             }
 
@@ -778,6 +917,36 @@ int main()
             ImGui::InputFloat("秒", &tmpUpdateSpeed, 0.1f, 1.0f, "%.1f");
             ImGui::PopItemWidth();
             ImGui::Spacing();
+
+            ImGui::PushItemWidth(itemWidth);
+            ImGui::SetCursorPosX(xPos);
+            ImGui::Checkbox("リンク拡大", &tmpIsLinkZoom);
+            ImGui::PopItemWidth();
+            ImGui::Spacing();
+
+            ImGui::SetCursorPosX(xPos);
+            ImGui::PushFont(bigFont);
+            ImGui::Text("差分形式");
+            ImGui::PopFont();
+            ImGui::PushItemWidth(itemWidth);
+            ImGui::SetCursorPosX(xPos);
+            ImGui::Combo("##差分形式", (int *)&tmpDiffPattern.type, "差分計算表示\0差分部分を強調色\0差分以外をテンプレ表示\0");
+
+            ImGui::PopItemWidth();
+            ImGui::Spacing();
+
+            if (tmpDiffPattern.type == DiffPatternType::ColorMask || tmpDiffPattern.type == DiffPatternType::OverlayTemplate)
+            {
+                ImGui::SetCursorPosX(xPos);
+                ImGui::PushFont(bigFont);
+                ImGui::Text("使用する色");
+                ImGui::PopFont();
+                ImGui::PushItemWidth(itemWidth);
+                ImGui::SetCursorPosX(xPos);
+                ImGui::ColorEdit4("##マスク色", (float *)&tmpMaskColor, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                ImGui::PopItemWidth();
+                ImGui::Spacing();
+            }
 
             ImGui::SetCursorPosX(xPos);
             ImGui::PushFont(bigFont);
@@ -853,6 +1022,16 @@ int main()
                 pixel_x = tmpPixel_x;
                 pixel_y = tmpPixel_y;
                 UpdateSpeed = tmpUpdateSpeed;
+                isLinkZoom = tmpIsLinkZoom;
+
+                OriginalUV0 = ImVec2(0, 0);
+                OriginalUV1 = ImVec2(1, 1);
+                RealtimeUV0 = ImVec2(0, 0);
+                RealtimeUV1 = ImVec2(1, 1);
+                DiffUV0 = ImVec2(0, 0);
+                DiffUV1 = ImVec2(1, 1);
+                diffPattern = tmpDiffPattern;
+                MaskColor = tmpMaskColor;
 
                 abort_fetch = true;
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
