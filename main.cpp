@@ -40,25 +40,49 @@ struct DiffPattern
 void setWindowIconFromExe(GLFWwindow *window)
 {
     HWND hwnd = glfwGetWin32Window(window);
-    char exePath[MAX_PATH];
-    GetModuleFileNameA(NULL, exePath, MAX_PATH);
+    if (!hwnd)
+        return;
 
-    HICON hIconLarge = nullptr;
-    HICON hIconSmall = nullptr;
+    char exePath[MAX_PATH];
+    if (!GetModuleFileNameA(NULL, exePath, MAX_PATH))
+        return;
+
+    HICON hIconLarge = nullptr, hIconSmall = nullptr;
     ExtractIconExA(exePath, 0, &hIconLarge, &hIconSmall, 1);
 
+    if (!hIconLarge && !hIconSmall)
+        return;
+
+    // --- 大アイコン設定（タスクバー用） ---
     if (hIconLarge)
     {
-        HICON prev = (HICON)SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconLarge);
-        if (prev)
-            DestroyIcon(prev);
+        int cx = GetSystemMetrics(SM_CXICON);
+        int cy = GetSystemMetrics(SM_CYICON);
+        HICON hLargeCopy = (HICON)CopyImage(hIconLarge, IMAGE_ICON, cx, cy, 0);
+        if (hLargeCopy)
+        {
+            HICON prev = (HICON)SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hLargeCopy);
+            if (prev && prev != hIconSmall)
+                DestroyIcon(prev);
+            // hLargeCopy は OS が参照するのでアプリ終了時に破棄
+        }
+        DestroyIcon(hIconLarge); // ExtractIconExA で得た元ハンドルは破棄
     }
 
+    // --- 小アイコン設定（タイトルバー用） ---
     if (hIconSmall)
     {
-        HICON prev = (HICON)SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
-        if (prev)
-            DestroyIcon(prev);
+        int cx = GetSystemMetrics(SM_CXSMICON);
+        int cy = GetSystemMetrics(SM_CYSMICON);
+        HICON hSmallCopy = (HICON)CopyImage(hIconSmall, IMAGE_ICON, cx, cy, 0);
+        if (hSmallCopy)
+        {
+            HICON prev = (HICON)SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hSmallCopy);
+            if (prev)
+                DestroyIcon(prev);
+            // hSmallCopy も OS が参照するのでアプリ終了時に破棄
+        }
+        DestroyIcon(hIconSmall);
     }
 }
 
