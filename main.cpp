@@ -1,5 +1,8 @@
 ﻿#define NOMINMAX // min/maxマクロの競合を回避
 
+#include "ImWS.h"
+#include "Base64.h"
+#include "JsonConverters.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
@@ -23,19 +26,136 @@
 #include <commdlg.h>
 #include <string>
 #include <fstream> // C++のファイルストリームを使用
+#include <nlohmann/json.hpp>
+#include <fcntl.h>   // ← _O_U8TEXT などの定義
+#include <io.h>      // ← _setmode の定義
 
-enum class DiffPatternType
-{
-    AbsDiff,        // 絶対値差分
-    ColorMask,      // 違う部分を緑
-    OverlayTemplate // 違う部分は緑、同じ部分はテンプレ画像
-};
+// WebSocketサーバーのインスタンス
+server wsServer;
+std::atomic<bool> running{ true };
 
-struct DiffPattern
+using json = nlohmann::json;
+
+void SetupConsoleIfDebug()
 {
-    DiffPatternType type;
-    DiffPattern(DiffPatternType t) : type(t) {}
-};
+#ifdef _DEBUG
+    AllocConsole();
+
+    FILE* fp;
+    freopen_s(&fp, "CONOUT$", "w", stdout);
+    freopen_s(&fp, "CONOUT$", "w", stderr);
+
+    // UTF-8 コードページに変更
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+
+    std::cout << u8"[デバッグ] コンソールを開きました！" << std::endl;
+#endif
+}
+
+void LaunchModules()
+{
+    // --- 実行ファイルのディレクトリを取得 ---
+    char pathBuf[MAX_PATH];
+    GetModuleFileNameA(NULL, pathBuf, MAX_PATH);
+    std::string fullPath(pathBuf);
+    size_t lastSlash = fullPath.find_last_of("\\/");
+    std::string appDir = fullPath.substr(0, lastSlash + 1);
+
+    // --- moduleList.json のパス ---
+    std::string moduleListPath = appDir + "assets\\moduleList.json";
+
+    // --- JSONを読み込み ---
+    std::ifstream file(moduleListPath);
+    if (!file.is_open())
+    {
+        std::cerr << "moduleList.json が開けませんでした: " << moduleListPath << std::endl;
+        return;
+    }
+
+    json moduleList;
+    file >> moduleList;
+    file.close();
+
+    // --- モジュールを順に起動 ---
+    for (auto& module : moduleList["modules"])
+    {
+        bool enabled = module.value("enabled", true);
+        if (!enabled) continue;
+
+        std::string name = module.value("name", "unknown");
+        std::string command = module.value("command", "");
+
+        if (command.empty())
+        {
+            std::cerr << "モジュール '" << name << "' のコマンドが設定されていません。" << std::endl;
+            continue;
+        }
+
+        std::cout << "モジュール '" << name << "' を起動中: " << command << std::endl;
+
+        // --- 非同期で起動（コンソールにブロックされない） ---
+        STARTUPINFOA si = { sizeof(si) };
+        PROCESS_INFORMATION pi;
+        if (CreateProcessA(
+            NULL, (LPSTR)command.c_str(),
+            NULL, NULL, FALSE,
+            CREATE_NO_WINDOW, NULL, NULL,
+            &si, &pi))
+        {
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+        }
+        else
+        {
+            std::cerr << "モジュール '" << name << "' の起動に失敗しました。" << std::endl;
+        }
+    }
+}
+
+
+std::string MatToBase64(const cv::Mat& mat)
+{
+    // 元は BGRA
+    CV_Assert(mat.type() == CV_8UC4);
+    CV_Assert(mat.isContinuous());
+
+    cv::Mat rgbaMat;
+    cv::cvtColor(mat, rgbaMat, cv::COLOR_BGRA2RGBA); // B G R A → R G B A
+
+    const unsigned char* data = rgbaMat.data;
+    size_t dataSize = rgbaMat.total() * rgbaMat.elemSize();
+
+    return Base64::Encode(data, dataSize);
+}
+
+
+// サーバーを別スレッドで実行する関数
+void runServerThread(const std::string& ipAddress, unsigned short port)
+{
+    wsServer.init_asio();
+    wsServer.set_reuse_addr(true);
+    // PC内からしかアクセスできないIPアドレス (localhost) を使用
+    asio::ip::tcp::endpoint ep(asio::ip::make_address(ipAddress), port);
+    wsServer.listen(ep);
+    wsServer.start_accept();
+
+    while (running.load())
+    {
+        wsServer.poll();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    try
+    {
+        wsServer.stop();
+    }
+    catch (...)
+    {
+    }
+}
+
 
 void setWindowIconFromExe(GLFWwindow *window)
 {
@@ -97,6 +217,8 @@ static bool showRealtime = true;
 static bool showDiff = true;
 static bool showSettings = true;
 static bool showInfo = true;
+static bool showWindowManager = true;
+static bool showModuleSeting = true;
 
 static int tile_x = 1818;
 static int tile_y = 806;
@@ -105,14 +227,21 @@ static int pixel_y = 358;
 
 static float UpdateSpeed = 4.0f;
 
-static bool isLinkZoom = false;
+static bool isLinkZoom = true;
 
-static DiffPattern diffPattern(DiffPatternType::AbsDiff);
+static DiffPattern diffPattern(DiffPatternType::ColorMask);
 
 static ImVec4 MaskColor = ImVec4(0, 1, 0, 1);
 
-static std::string szFile = "template.png";
+static std::string szFile = "assets/template.png";
 char szFileBuffer[MAX_PATH] = {0};
+std::string szFileStr;
+
+static bool autoStartModules = false;
+static bool useServer = true;
+static std::string serverIP = "127.0.0.1";  // すべてのネットワークインターフェイスで受け付ける
+static unsigned short serverPort = 9002;
+
 
 // INIファイルの絶対パスを格納するグローバル変数
 std::string iniPath;
@@ -133,6 +262,8 @@ void SaveAppSettings()
     ofs << "showDiff=" << showDiff << std::endl;
     ofs << "showSettings=" << showSettings << std::endl;
     ofs << "showInfo=" << showInfo << std::endl;
+	ofs << "showWindowManager=" << showWindowManager << std::endl;
+	ofs << "showModuleSeting=" << showModuleSeting << std::endl;
 
     // 位置系
     ofs << "tile_x=" << tile_x << std::endl;
@@ -150,6 +281,11 @@ void SaveAppSettings()
         << MaskColor.w << std::endl;
     // パス
     ofs << "path=" << szFile << std::endl;
+    // サーバー
+	ofs << "useServer=" << useServer << std::endl;
+	ofs << "autoStartModules=" << autoStartModules << std::endl;
+	ofs << "serverIP=" << serverIP << std::endl;
+	ofs << "serverPort=" << serverPort << std::endl;
 
     ofs.close();
 }
@@ -186,6 +322,10 @@ void LoadAppSettings()
                 showSettings = (std::stoi(val) != 0);
             else if (key == "showInfo")
                 showInfo = (std::stoi(val) != 0);
+			else if (key == "showWindowManager")
+				showWindowManager = (std::stoi(val) != 0);
+			else if (key == "showModuleSeting")
+				showModuleSeting = (std::stoi(val) != 0);
             else if (key == "tile_x")
                 tile_x = std::stoi(val);
             else if (key == "tile_y")
@@ -206,6 +346,14 @@ void LoadAppSettings()
             }
             else if (key == "path")
                 szFile = val;
+			else if (key == "useServer")
+				useServer = (std::stoi(val) != 0);
+			else if (key == "autoStartModules")
+				autoStartModules = (std::stoi(val) != 0);
+			else if (key == "serverIP")
+				serverIP = val;
+			else if (key == "serverPort")
+				serverPort = static_cast<unsigned short>(std::stoi(val));
         }
         catch (const std::exception &e)
         {
@@ -484,6 +632,7 @@ void CalcUVForAspect(float imgAspect, float winAspect, ImVec2 &uv0, ImVec2 &uv1)
 
 int main()
 {
+    SetupConsoleIfDebug();
     // 実行ファイルのディレクトリを取得し、INIファイルの絶対パスを作成
     char pathBuf[MAX_PATH];
     GetModuleFileNameA(NULL, pathBuf, MAX_PATH);
@@ -494,9 +643,11 @@ int main()
 
     std::string imguiIniPath = appDir + "imgui.ini";
 
+
     if (!glfwInit())
         return -1;
     GLFWwindow *window = glfwCreateWindow(1200, 800, "WP-Guardian", nullptr, nullptr);
+    glfwMaximizeWindow(window);
     if (!window)
     {
         glfwTerminate();
@@ -529,8 +680,30 @@ int main()
 
     // アプリ起動時に設定を読み込む
     LoadAppSettings();
+    std::thread serverThread;
+
+    if (useServer)
+    {
+        running.store(true);
+        serverThread = std::thread(runServerThread, serverIP, static_cast<unsigned short>(serverPort));
+    }
+    else
+    {
+        running.store(false);
+    }
+
+    ImWS imws(wsServer);
+    imws.set_server_handlers();
+
+    if (autoStartModules)
+    {
+        LaunchModules();
+    }
+
     // szFileBufferにszFileの値をコピーして、ImGuiの初期値を設定
-    strncpy(szFileBuffer, szFile.c_str(), MAX_PATH);
+    strncpy(szFileBuffer, szFile.c_str(), MAX_PATH - 1);
+    szFileBuffer[MAX_PATH - 1] = '\0';
+	szFileStr = szFile;
 
     cv::Mat originalImg = cv::imread(szFile, cv::IMREAD_UNCHANGED);
     if (originalImg.empty())
@@ -539,14 +712,23 @@ int main()
     }
     ensureBGRA(originalImg);
     GLuint originalTexID = matToTexture(originalImg);
+	std::string originalBase64 = MatToBase64(originalImg);
     int width = originalImg.cols;
     int height = originalImg.rows;
 
     cv::Mat realtimeImg(height, width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
     GLuint realtimeTexID = matToTexture(realtimeImg);
+	std::string realtimeBase64 = MatToBase64(realtimeImg);
 
     cv::Mat emptyDiff(height, width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
     GLuint diffTexID = matToTexture(emptyDiff);
+	std::string diffBase64 = MatToBase64(emptyDiff);
+
+	imws.register_readonly_variable("width", width);
+	imws.register_readonly_variable("height", height);
+	imws.register_readonly_variable("originalImage", originalBase64);
+	imws.register_readonly_variable("realtimeImage", realtimeBase64);
+	imws.register_readonly_variable("diffImage", diffBase64);
 
     static int tmpTile_x = tile_x;
     static int tmpTile_y = tile_y;
@@ -556,10 +738,52 @@ int main()
     static bool tmpIsLinkZoom = isLinkZoom;
     static DiffPattern tmpDiffPattern = diffPattern;
     static ImVec4 tmpMaskColor = MaskColor;
+    static bool tmpAutoStartModules = autoStartModules;
+	static int tmpServerPort = serverPort;
+    static std::string tmpServerIP = serverIP;
+	static char bufTmpServerIP[128];
+	strncpy(bufTmpServerIP, tmpServerIP.c_str(),sizeof(bufTmpServerIP) - 1);
+    bufTmpServerIP[sizeof(bufTmpServerIP) - 1] = '\0';
+	static bool tmpUseServer = useServer;
+
+
+	imws.register_writable_variable("tmpTile_x", tmpTile_x);
+	imws.register_writable_variable("tmpTile_y", tmpTile_y);
+	imws.register_writable_variable("tmpPixel_x", tmpPixel_x);
+	imws.register_writable_variable("tmpPixel_y", tmpPixel_y);
+	imws.register_writable_variable("tmpUpdateSpeed", tmpUpdateSpeed);
+	imws.register_writable_variable("tmpDiffPattern", tmpDiffPattern);
+	imws.register_writable_variable("tmpMaskColor", tmpMaskColor);
+    imws.register_writable_variable("tmpPath", szFileStr);
+
+
+    imws.register_readonly_variable("tmpTile_x", tmpTile_x);
+	imws.register_readonly_variable("tmpTile_y", tmpTile_y);
+	imws.register_readonly_variable("tmpPixel_x", tmpPixel_x);
+	imws.register_readonly_variable("tmpPixel_y", tmpPixel_y);
+	imws.register_readonly_variable("tmpUpdateSpeed", tmpUpdateSpeed);
+	imws.register_readonly_variable("tmpDiffPattern", tmpDiffPattern);
+	imws.register_readonly_variable("tmpMaskColor", tmpMaskColor);
+	imws.register_readonly_variable("tmpPath", szFileStr);
+
+
+	imws.register_readonly_variable("tile_x", tile_x);
+	imws.register_readonly_variable("tile_y", tile_y);
+	imws.register_readonly_variable("pixel_x", pixel_x);
+	imws.register_readonly_variable("pixel_y", pixel_y);
+	imws.register_readonly_variable("UpdateSpeed", UpdateSpeed);
+	imws.register_readonly_variable("diffPattern", diffPattern);
+	imws.register_readonly_variable("MaskColor", MaskColor);
+	imws.register_readonly_variable("path", szFile);
 
     double diffPercent = 0.0;
     int totalOpaquePixels = 0;
     int changedPixels = 0;
+
+	imws.register_readonly_variable("totalPixels", totalOpaquePixels);
+	imws.register_readonly_variable("wrongPixels", changedPixels);
+
+    imws.register_readonly_variable("diffPercent", diffPercent);
 
     std::mutex imgMutex;
     std::condition_variable cv_newFrame;
@@ -578,6 +802,9 @@ int main()
     ImVec2 DiffOrigin;
     bool isPanningDiff = false;
     ImVec2 lastMouseDiff;
+
+	bool update = false;
+	imws.register_writable_variable("update", update);
 
     std::thread updateThread([&]()
                              {
@@ -624,10 +851,15 @@ int main()
                 ImGui::MenuItem("差分画像", nullptr, &showDiff);
                 ImGui::MenuItem("設定", nullptr, &showSettings);
                 ImGui::MenuItem("情報", nullptr, &showInfo);
+				ImGui::MenuItem("ウィンドウ管理", nullptr, &showWindowManager);
+				ImGui::MenuItem("モジュール設定", nullptr, &showModuleSeting);
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
         }
+
+        imws.update();
+		imws.drawWindowManager(showWindowManager);
 
         if (showOriginal)
         {
@@ -979,7 +1211,16 @@ int main()
             ImGui::PushItemWidth(itemWidth - 80); // ボタン幅80px確保
             ImGui::SetCursorPosX(xPos);
             // szFileBufferを使用
-            ImGui::InputText("##画像保存先", szFileBuffer, MAX_PATH);
+            if (ImGui::InputText("##画像保存先", szFileBuffer, MAX_PATH))
+            {
+				szFileStr = szFileBuffer;
+            }
+            else
+            {
+                strncpy(szFileBuffer, szFileStr.c_str(), MAX_PATH - 1);
+                szFileBuffer[MAX_PATH - 1] = '\0';
+
+            }
             ImGui::PopItemWidth();
 
             ImGui::SameLine();
@@ -1003,18 +1244,18 @@ int main()
                 if (GetOpenFileName(&ofn))
                 {
                     // ダイアログでパスが選択されたら、std::string変数にコピー
-                    szFile = szFileBuffer;
+                    szFileStr = szFileBuffer;
                 }
             }
             ImGui::Spacing();
 
             ImGui::SetCursorPosX(xPos);
-            if (ImGui::Button("更新", ImVec2(itemWidth, 0)))
+            if (ImGui::Button("更新", ImVec2(itemWidth, 0)) || update)
             {
                 std::lock_guard<std::mutex> lock(imgMutex);
 
                 // ImGuiバッファからszFileに最新のパスをコピー
-                szFile = szFileBuffer;
+                szFile = szFileStr;
 
                 if (!szFile.empty())
                 {
@@ -1026,6 +1267,7 @@ int main()
                         if (originalTexID)
                             glDeleteTextures(1, &originalTexID);
                         originalTexID = matToTexture(originalImg);
+						originalBase64 = MatToBase64(originalImg);
                         width = originalImg.cols;
                         height = originalImg.rows;
                         realtimeImg = cv::Mat(height, width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
@@ -1034,10 +1276,12 @@ int main()
                         if (realtimeTexID)
                             glDeleteTextures(1, &realtimeTexID);
                         realtimeTexID = matToTexture(realtimeImg);
+						realtimeBase64 = MatToBase64(realtimeImg);
 
                         if (diffTexID)
                             glDeleteTextures(1, &diffTexID);
                         diffTexID = matToTexture(emptyDiff);
+						diffBase64 = MatToBase64(emptyDiff);
                     }
                 }
 
@@ -1060,6 +1304,8 @@ int main()
                 abort_fetch = true;
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 abort_fetch = false;
+
+				update = false;
             }
             ImGui::End();
         }
@@ -1073,6 +1319,102 @@ int main()
             ImGui::PopFont();
             ImGui::End();
         }
+        if (showModuleSeting)
+        {
+			ImGui::Begin("モジュール設定", &showModuleSeting);
+            float windowWidth = ImGui::GetContentRegionAvail().x;
+            float itemWidth = ImGui::GetContentRegionAvail().x * 0.9f;
+            float xPos = (windowWidth - itemWidth) * 0.5f;
+            ImGui::PushItemWidth(itemWidth);
+            ImGui::SetCursorPosX(xPos);
+            ImGui::Text("モジュールの動作(主にサーバーに関する)設定です。"); 
+            ImGui::SetCursorPosX(xPos);
+			ImGui::Text("設定の変更を保存する際はアプリを再起動します");
+			ImGui::Spacing();
+            ImGui::SetCursorPosX(xPos);
+            ImGui::Text("モジュールを使用するか");
+            ImGui::SetCursorPosX(xPos);
+			ImGui::Checkbox("##useServer", &tmpUseServer);
+            ImGui::SetCursorPosX(xPos);
+            if (tmpUseServer)
+            {
+                ImGui::Text("モジュールを自動で起動するか");
+                ImGui::SetCursorPosX(xPos);
+                ImGui::Checkbox("##autoStartModules", &tmpAutoStartModules);
+                ImGui::SetCursorPosX(xPos);
+                ImGui::Text("WebSocketサーバー ポート番号:");
+                ImGui::SetCursorPosX(xPos);
+                if (ImGui::InputInt("##port", &tmpServerPort))
+                {
+                    if (tmpServerPort < 0)
+                        tmpServerPort = 0;
+                    else if (tmpServerPort > 65535)
+                        tmpServerPort = 65535;
+                }
+                ImGui::SetCursorPosX(xPos);
+                ImGui::Text("サーバーIPアドレス:");
+                ImGui::SetCursorPosX(xPos);
+                if (ImGui::InputText("##ip", bufTmpServerIP, 128))
+                {
+                    tmpServerIP = std::string(bufTmpServerIP);
+                }
+            }
+            else
+            {
+                tmpAutoStartModules = false;
+                ImGui::SetCursorPosX(xPos);
+                ImGui::Text("モジュールを無効にすると、サーバー自体が起動しなくなります。");
+            }
+            ImGui::PopItemWidth();
+            ImGui::SetCursorPosX(xPos);
+            if (ImGui::Button("更新", ImVec2(itemWidth, 0)))
+            {
+
+                int result = MessageBoxW(NULL,
+                    L"設定を反映するにはアプリを再起動します。\n再起動しますか？",
+                    L"再起動", MB_YESNO | MB_ICONQUESTION);
+
+                if (result == IDYES)
+                {
+					useServer = tmpUseServer;
+					autoStartModules = tmpAutoStartModules;
+                    serverPort = tmpServerPort;
+                    serverIP = tmpServerIP;
+                    stopThread = true;
+                    if (updateThread.joinable())
+                        updateThread.join();
+
+                    glDeleteTextures(1, &originalTexID);
+                    glDeleteTextures(1, &realtimeTexID);
+                    glDeleteTextures(1, &diffTexID);
+
+                    SaveAppSettings();
+                    ImGui::SaveIniSettingsToDisk(imguiIniPath.c_str());
+                    ImGui_ImplOpenGL3_Shutdown();
+                    ImGui_ImplGlfw_Shutdown();
+                    ImGui::DestroyContext();
+                    glfwDestroyWindow(window);
+                    glfwTerminate();
+
+                    running.store(false);
+                    if (serverThread.joinable())
+                    {
+                        serverThread.join();
+                    }
+                    // 自分自身を再起動
+                    char exePath[MAX_PATH];
+                    GetModuleFileNameA(NULL, exePath, MAX_PATH);
+                    ShellExecuteA(NULL, "open", exePath, NULL, NULL, SW_SHOWDEFAULT);
+
+                    exit(0);
+                }
+            }
+
+
+			ImGui::End();
+
+
+        }
 
         std::unique_lock<std::mutex> lock(imgMutex);
         if (cv_newFrame.wait_for(lock, std::chrono::milliseconds(1), [&]
@@ -1084,12 +1426,14 @@ int main()
                 glBindTexture(GL_TEXTURE_2D, realtimeTexID);
                 glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, realtimeImg.cols, realtimeImg.rows, format, GL_UNSIGNED_BYTE, realtimeImg.data);
                 glBindTexture(GL_TEXTURE_2D, 0);
+				realtimeBase64 = MatToBase64(realtimeImg);
             }
             if (!emptyDiff.empty() && emptyDiff.cols == width && emptyDiff.rows == height)
             {
                 glBindTexture(GL_TEXTURE_2D, diffTexID);
                 glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, emptyDiff.cols, emptyDiff.rows, GL_BGRA, GL_UNSIGNED_BYTE, emptyDiff.data);
                 glBindTexture(GL_TEXTURE_2D, 0);
+				diffBase64 = MatToBase64(emptyDiff);
             }
             newFrameReady = false;
         }
@@ -1128,5 +1472,12 @@ int main()
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
+
+    running.store(false);
+    if (serverThread.joinable())
+    {
+        serverThread.join();
+    }
+
     return 0;
 }

@@ -1,0 +1,14 @@
+{
+    "modules": [
+        {
+            "name": "PythonTest",
+            "enabled": false,
+            "command": "python assets/modules/Python/PythonModule.py"
+        },
+        {
+            "name": "DiscordBot",
+            "enabled": false,
+            "command": "python assets/modules/Python/DiscordBot.py"
+        }
+    ]
+}
