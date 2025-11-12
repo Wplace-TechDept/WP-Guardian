@@ -233,7 +233,7 @@ static DiffPattern diffPattern(DiffPatternType::ColorMask);
 
 static ImVec4 MaskColor = ImVec4(0, 1, 0, 1);
 
-static std::string szFile = "assets/template.png";
+static std::string szFile = "assets\\template.png";
 char szFileBuffer[MAX_PATH] = {0};
 std::string szFileStr;
 
