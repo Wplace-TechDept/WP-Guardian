@@ -28,8 +28,14 @@
   * moduleList.jsonに記述すると自動起動可能
   * モジュール未使用時はサーバー非起動
   * サーバーIP/ポート、モジュール自動起動のON/OFF設定可能
-  * デモモジュール（Python）を `assets\modules\Python` に同梱
+  * 標準モジュール（Python）を `assets\modules\Python` に同梱
 
+### **標準モジュール**
+  * ImWSWindow.pyとImWSVariable.pyによって簡単にウィンドウ作成や変数取得を可能にしています。
+  * PythonModuleTest.pyに動作テストとしてウィンドウ、ウィジェットの表示、変数の取得が含まれます。デフォルトで自動起動がfalseになっています。
+  * DiscordBot.pyには、Webhookで動作する最低限のDiscordBotのデモが含まれています。最低限なので実用的ではないので自動起動はfalseになっています。
+  * bookmark.pyは座標や画像パスを保存してブックマークのように使用できるモジュールです。保存したブックマークはbookmarks.jsonに保存されます。自動起動はtrueになっています。
+  * OpenWplace.pyは現在監視している部分をブラウザでそのまま開くためのモジュールです。自動起動はtrueになっています。
 
 ### **読み取り専用変数 (readonly)**
 
