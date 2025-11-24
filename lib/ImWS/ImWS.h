@@ -1,4 +1,4 @@
-﻿#ifndef IMWSI_H
+﻿#ifndef IMWS_H
 #define IMWS_H
 #ifndef _WEBSOCKETPP_CPP11_TYPE_TRAITS_
 #define _WEBSOCKETPP_CPP11_TYPE_TRAITS_

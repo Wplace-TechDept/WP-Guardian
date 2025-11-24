@@ -47,7 +47,7 @@ async def main_loop(ws,win):
         await asyncio.sleep(0.1)  # 100msごとにループ
 async def main():
     uri = "ws://localhost:9002"
-    async with websockets.connect(uri) as ws:
+    async with websockets.connect(uri,max_size=None) as ws:
         win = Window("DiscordBot")
         win.inputTextWidget("inputtxt1","https://","WebhookURL")
         win.buttonWidget("btn1","現在の状態を送信",partial(on_click, ws))

@@ -3,12 +3,22 @@
         {
             "name": "PythonTest",
             "enabled": false,
-            "command": "python assets/modules/Python/PythonModule.py"
+            "command": "python assets/modules/Python/PythonModuleTest.py"
         },
         {
             "name": "DiscordBot",
             "enabled": false,
             "command": "python assets/modules/Python/DiscordBot.py"
+        },
+        {
+            "name": "Bookmark",
+            "enabled": true,
+            "command": "python assets/modules/Python/bookmark.py"
+        },
+        {
+            "name": "OpenWplace",
+            "enabled": true,
+            "command": "python assets/modules/Python/OpenWplace.py"
         }
     ]
 }
