@@ -158,7 +158,7 @@ void showVersionWindow() {
         ImGui::Text("新しいバージョンがあります！ 最新バージョン: %s", latestVersion.c_str());
     }
     else {
-        ImGui::Text("既に最新バージョンです！");
+        ImGui::Text("既に最新バージョンです！%s",APP_VERSION.c_str());
     }
     if (ImGui::Button("アップデートページを開く")) {
         ShellExecuteA(NULL, "open", updateURL.c_str(), NULL, NULL, SW_SHOWNORMAL);
