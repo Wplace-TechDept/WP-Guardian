@@ -26,7 +26,11 @@ def update(data):
 async def get_variable(ws, name: str, timeout: float = 3.0):
     """指定した変数の値を取得。timeout秒以内に取得できなければ例外"""
     start = asyncio.get_event_loop().time()
-    await ws.send(json.dumps({"getVariable": name}))
+    await ws.send(json.dumps({
+        "command": "getVariable",
+        "payload": {"name": name}
+    }))
+
     while True:
         now = time.time()
         # 最新のメッセージから検索
@@ -42,4 +46,8 @@ async def get_variable(ws, name: str, timeout: float = 3.0):
 async def set_variable(ws, name: str, value):
     """変数を設定"""
     print("setVariable")
-    await ws.send(json.dumps({"setVariable": name, "value": value}))
+    await ws.send(json.dumps({
+        "command": "setVariable",
+        "payload": {"name": name, "value": value}
+    }))
+

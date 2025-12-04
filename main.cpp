@@ -35,6 +35,148 @@ server wsServer;
 std::atomic<bool> running{ true };
 
 using json = nlohmann::json;
+// アプリバージョン
+
+const std::string APP_VERSION = "v2.1.0"; //バージョン更新時にかならず書き換える
+
+
+// --- 設定などグローバル変数 ---
+static bool showOriginal = true;
+static bool showRealtime = true;
+static bool showDiff = true;
+static bool showSettings = true;
+static bool showInfo = true;
+static bool showWindowManager = true;
+static bool showModuleSeting = true;
+
+static int tile_x = 1818;
+static int tile_y = 806;
+static int pixel_x = 989;
+static int pixel_y = 358;
+
+static float UpdateSpeed = 4.0f;
+
+static bool isLinkZoom = true;
+
+static DiffPattern diffPattern(DiffPatternType::ColorMask);
+
+static ImVec4 MaskColor = ImVec4(0, 1, 0, 1);
+
+static std::string szFile = "assets\\template.png";
+char szFileBuffer[MAX_PATH] = { 0 };
+std::string szFileStr;
+
+static bool autoStartModules = false;
+static bool useServer = true;
+static std::string serverIP = "127.0.0.1";  // すべてのネットワークインターフェイスで受け付ける
+static unsigned short serverPort = 9002;
+
+static bool foundUpdate = false;
+static std::string latestVersion = "";
+static std::string updateURL = "";
+static bool showUpdateMessage = true;
+// ----------------------------
+
+struct Version {
+    int major, minor, patch;
+};
+
+Version parseVersion(const std::string& v) {
+    std::string s = (v[0] == 'v') ? v.substr(1) : v;
+
+    Version ver{};
+    ver.major = ver.minor = ver.patch = 0;
+
+    int count = sscanf(s.c_str(), "%d.%d.%d", &ver.major, &ver.minor, &ver.patch);
+    return ver;
+}
+
+bool isNewer(const Version& remote, const Version& local) {
+    if (remote.major != local.major) return remote.major > local.major;
+    if (remote.minor != local.minor) return remote.minor > local.minor;
+    return remote.patch > local.patch;
+}
+
+std::string getLatestVersion(const std::string& owner, const std::string& repo) {
+    std::string url = "https://api.github.com/repos/" + owner + "/" + repo + "/releases/latest";
+
+    cpr::Response r = cpr::Get(
+        cpr::Url{ url },
+        cpr::Header{ {"User-Agent", "MyApp"} }
+    );
+
+    if (r.status_code != 200) {
+        std::cerr << "Failed: " << r.status_code << "\n";
+        return "";
+    }
+
+    auto json = nlohmann::json::parse(r.text);
+    if (!json.contains("tag_name")) return "";
+
+    return json["tag_name"];
+}
+
+void checkUpdate() {
+    if (!foundUpdate) {
+        std::string latest = getLatestVersion("Kikumon-Tech", "WP-Guardian");
+        if (latest.empty()) {
+            std::cout << "最新バージョン取得失敗" << std::endl;
+            return;
+        }
+
+        Version local = parseVersion(APP_VERSION);
+        Version remote = parseVersion(latest);
+
+        if (isNewer(remote, local)) {
+            std::cout << "アップデートがあります！ 最新: " << latest << std::endl;
+			latestVersion = latest;
+			updateURL = "https://github.com/Kikumon-Tech/WP-Guardian/releases/tag/" + latest;
+            foundUpdate = true;
+        }
+        else {
+            std::cout << "最新です" << std::endl;
+            foundUpdate = false;
+            showUpdateMessage = true;
+        }
+    }
+    
+}
+bool showVersion = foundUpdate && showUpdateMessage;
+
+void showVersionWindow() {
+    if (!showVersion) return;
+    if (!ImGui::Begin("バージョン", &showVersion)) {
+        ImGui::End();
+        return;
+    }
+    static bool loadedUpdate = false;
+    if (!loadedUpdate) {
+        checkUpdate();
+        loadedUpdate = true;
+    }
+    if (foundUpdate) {
+        ImGui::Text("新しいバージョンがあります！ 最新バージョン: %s", latestVersion.c_str());
+    }
+    else {
+        ImGui::Text("既に最新バージョンです！");
+    }
+    if (ImGui::Button("アップデートページを開く")) {
+        ShellExecuteA(NULL, "open", updateURL.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    }
+    // 内部フラグは hideUpdateMessage（trueなら非表示）
+    bool hideUpdateMessage = !showUpdateMessage;
+
+    // UI 側で反転させて渡す
+    if (ImGui::Checkbox("このメッセージを再度表示しない", &hideUpdateMessage)) {
+        showUpdateMessage = !hideUpdateMessage; // 内部フラグに反映
+    }
+
+    ImGui::End();
+    if (!showVersion) {
+        loadedUpdate = false;
+    }
+}
+
 
 void SetupConsoleIfDebug()
 {
@@ -52,6 +194,130 @@ void SetupConsoleIfDebug()
 
     std::cout << u8"[デバッグ] コンソールを開きました！" << std::endl;
 #endif
+}
+
+// --- モジュールJson用グローバル変数 ---
+bool showModuleManager = false;  // ウィンドウ表示フラグ
+std::string moduleListPath = "assets/moduleList.json";
+json moduleList;
+
+// --- JSON読み込み ---
+bool LoadModuleList()
+{
+    std::ifstream file(moduleListPath);
+    if (!file.is_open()) {
+        std::cerr << "moduleList.json が開けません: " << moduleListPath << std::endl;
+        return false;
+    }
+    file >> moduleList;
+    file.close();
+    return true;
+}
+
+// --- JSON保存 ---
+bool SaveModuleList()
+{
+    std::ofstream file(moduleListPath);
+    if (!file.is_open()) {
+        std::cerr << "moduleList.json の保存に失敗: " << moduleListPath << std::endl;
+        return false;
+    }
+    file << moduleList.dump(4);
+    file.close();
+    return true;
+}
+
+// --- ウィンドウ描画 ---
+void ShowModuleManagerWindow()
+{
+    if (!showModuleManager) return;
+
+    if (!ImGui::Begin("モジュール管理", &showModuleManager))
+    {
+        ImGui::End();
+        return;
+    }
+
+    static bool loaded = false;
+    if (!loaded)
+    {
+        if (!LoadModuleList())
+            moduleList["modules"] = json::array();
+        loaded = true;
+    }
+
+    if (moduleList.contains("modules") && moduleList["modules"].is_array())
+    {
+        // 削除用に保持しておくインデックス
+        int deleteIndex = -1;
+
+        for (size_t i = 0; i < moduleList["modules"].size(); ++i)
+        {
+            auto& module = moduleList["modules"][i];
+
+            // enabled チェックボックス
+            bool enabled = module.value("enabled", true);
+            if (ImGui::Checkbox(("有効##" + std::to_string(i)).c_str(), &enabled))
+                module["enabled"] = enabled;
+
+            // 名前編集
+            char nameBuf[128];
+            strncpy(nameBuf, module.value("name", "").c_str(), sizeof(nameBuf));
+            if (ImGui::InputText(("名前##" + std::to_string(i)).c_str(), nameBuf, sizeof(nameBuf)))
+                module["name"] = std::string(nameBuf);
+
+            // コマンド編集
+            char cmdBuf[256];
+            strncpy(cmdBuf, module.value("command", "").c_str(), sizeof(cmdBuf));
+            if (ImGui::InputText(("コマンド##" + std::to_string(i)).c_str(), cmdBuf, sizeof(cmdBuf)))
+                module["command"] = std::string(cmdBuf);
+
+            // 削除ボタン
+            ImGui::SameLine();
+            if (ImGui::Button(("削除##" + std::to_string(i)).c_str()))
+            {
+                deleteIndex = (int)i; // 後で削除
+            }
+
+            ImGui::Separator();
+        }
+
+        // 実際に削除（ループ中にeraseすると問題になるため後で）
+        if (deleteIndex != -1)
+        {
+            moduleList["modules"].erase(moduleList["modules"].begin() + deleteIndex);
+        }
+    }
+    else
+    {
+        ImGui::Text("moduleList.jsonに何も書かれていません");
+    }
+
+    // 新規追加ボタン
+    if (ImGui::Button("新しいモジュールを追加"))
+    {
+        json newModule = {
+            {"enabled", true},
+            {"name", "新しいモジュール"},
+            {"command", ""}
+        };
+        moduleList["modules"].push_back(newModule);
+    }
+
+    // 保存ボタン
+    if (ImGui::Button("セーブ"))
+    {
+        if (SaveModuleList())
+            std::cout << "moduleList.json を保存しました\n";
+    }
+
+    ImGui::End();
+
+    if (!showModuleManager)
+    {
+        moduleList.clear();
+        loaded = false;
+    }
 }
 
 void LaunchModules()
@@ -130,16 +396,40 @@ std::string MatToBase64(const cv::Mat& mat)
     return Base64::Encode(data, dataSize);
 }
 
+bool can_bind(const std::string& ip, unsigned short port)
+{
+    try {
+        asio::io_context ctx;
+        asio::ip::tcp::acceptor acceptor(ctx);
+        asio::ip::tcp::endpoint ep(asio::ip::make_address(ip), port);
+        acceptor.open(ep.protocol());
+        acceptor.bind(ep);  // ここでポート使用中なら例外
+        acceptor.close();
+        return true; // バインド可能
+    }
+    catch (const std::exception&) {
+        return false; // 既に使用中などでバインド不可
+    }
+}
 
-// サーバーを別スレッドで実行する関数
+
 void runServerThread(const std::string& ipAddress, unsigned short port)
 {
     wsServer.init_asio();
     wsServer.set_reuse_addr(true);
-    // PC内からしかアクセスできないIPアドレス (localhost) を使用
-    asio::ip::tcp::endpoint ep(asio::ip::make_address(ipAddress), port);
-    wsServer.listen(ep);
-    wsServer.start_accept();
+
+    try {
+        // ここで listen() する
+        asio::ip::tcp::endpoint ep(asio::ip::make_address(ipAddress), port);
+        wsServer.listen(ep);
+        wsServer.start_accept();
+    }
+    catch (const websocketpp::exception& e) {
+        std::cerr << "サーバー起動失敗: " << e.what() << std::endl;
+        return;
+    }
+
+    std::cout << "サーバー起動成功: " << ipAddress << ":" << port << std::endl;
 
     while (running.load())
     {
@@ -147,14 +437,12 @@ void runServerThread(const std::string& ipAddress, unsigned short port)
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    try
-    {
-        wsServer.stop();
-    }
-    catch (...)
-    {
-    }
+    wsServer.stop();
 }
+
+
+
+
 
 
 void setWindowIconFromExe(GLFWwindow *window)
@@ -212,37 +500,6 @@ std::atomic<bool> abort_fetch{false};
 
 std::atomic<bool> stopThread{false};
 
-static bool showOriginal = true;
-static bool showRealtime = true;
-static bool showDiff = true;
-static bool showSettings = true;
-static bool showInfo = true;
-static bool showWindowManager = true;
-static bool showModuleSeting = true;
-
-static int tile_x = 1818;
-static int tile_y = 806;
-static int pixel_x = 989;
-static int pixel_y = 358;
-
-static float UpdateSpeed = 4.0f;
-
-static bool isLinkZoom = true;
-
-static DiffPattern diffPattern(DiffPatternType::ColorMask);
-
-static ImVec4 MaskColor = ImVec4(0, 1, 0, 1);
-
-static std::string szFile = "assets\\template.png";
-char szFileBuffer[MAX_PATH] = {0};
-std::string szFileStr;
-
-static bool autoStartModules = false;
-static bool useServer = true;
-static std::string serverIP = "127.0.0.1";  // すべてのネットワークインターフェイスで受け付ける
-static unsigned short serverPort = 9002;
-
-
 // INIファイルの絶対パスを格納するグローバル変数
 std::string iniPath;
 
@@ -286,6 +543,11 @@ void SaveAppSettings()
 	ofs << "autoStartModules=" << autoStartModules << std::endl;
 	ofs << "serverIP=" << serverIP << std::endl;
 	ofs << "serverPort=" << serverPort << std::endl;
+    // アップデート
+	ofs << "foundUpdate=" << foundUpdate << std::endl;
+	ofs << "latestVersion=" << latestVersion << std::endl;
+	ofs << "updateURL=" << updateURL << std::endl;
+	ofs << "showUpdateMessage=" << showUpdateMessage << std::endl;
 
     ofs.close();
 }
@@ -354,6 +616,14 @@ void LoadAppSettings()
 				serverIP = val;
 			else if (key == "serverPort")
 				serverPort = static_cast<unsigned short>(std::stoi(val));
+			else if (key == "foundUpdate")
+				foundUpdate = (std::stoi(val) != 0);
+			else if (key == "latestVersion")
+                latestVersion = val;
+            else if (key == "updateURL")
+				updateURL = val;
+			else if (key == "showUpdateMessage")
+				showUpdateMessage = (std::stoi(val) != 0);
         }
         catch (const std::exception &e)
         {
@@ -682,24 +952,37 @@ int main()
     LoadAppSettings();
     std::thread serverThread;
 
-    if (useServer)
-    {
-        running.store(true);
-        serverThread = std::thread(runServerThread, serverIP, static_cast<unsigned short>(serverPort));
-    }
-    else
-    {
-        running.store(false);
-    }
+    // useServerがtrueの場合にのみ、ポートの空き状況をチェック
+    if (useServer) {
+        // 1. ポートが使用可能かメインスレッドで先に確認する
+        bool isPortAvailable = can_bind(serverIP, serverPort);
 
+        if (isPortAvailable) {
+            // ポートが空いているので、サーバーを別スレッドで起動
+            // runServerThreadはwsServer.poll()でループするため、スレッドで実行
+            serverThread = std::thread(runServerThread, serverIP, serverPort);
+            // サーバー起動スレッドのハンドルを適切に管理（detachまたはjoin）
+        }
+        else {
+            // 2. ポートが使用中のため、サーバーは起動せず、フラグを更新
+            std::cerr << "ポートがすでに使用されています: " << serverPort << "。サーバーを起動しません。" << std::endl;
+            // サーバーが起動しないため、関連するモジュールの自動起動も無効化する
+            useServer = false;
+            autoStartModules = false;
+            // ※このフラグ変更は、runServerThread内で実行されていた処理と同じです。
+        }
+    }
     ImWS imws(wsServer);
     imws.set_server_handlers();
-
-    if (autoStartModules)
-    {
+    // 3. 最終的に確定した autoStartModules の値に基づいてモジュールを起動
+    if (autoStartModules) {
         LaunchModules();
     }
 
+    if (showUpdateMessage) {
+        checkUpdate();
+    }
+    showVersion = foundUpdate && showUpdateMessage;
     // szFileBufferにszFileの値をコピーして、ImGuiの初期値を設定
     strncpy(szFileBuffer, szFile.c_str(), MAX_PATH - 1);
     szFileBuffer[MAX_PATH - 1] = '\0';
@@ -855,11 +1138,19 @@ int main()
 				ImGui::MenuItem("モジュール設定", nullptr, &showModuleSeting);
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("詳細"))
+            {
+                ImGui::MenuItem("アップデートを確認", nullptr, &showVersion);
+				ImGui::MenuItem("モジュール管理", nullptr, &showModuleManager);
+                ImGui::EndMenu();
+			}
             ImGui::EndMainMenuBar();
         }
 
         imws.update();
 		imws.drawWindowManager(showWindowManager);
+        ShowModuleManagerWindow();
+        showVersionWindow();
 
         if (showOriginal)
         {
@@ -1335,12 +1626,17 @@ int main()
             ImGui::Text("モジュールを使用するか");
             ImGui::SetCursorPosX(xPos);
 			ImGui::Checkbox("##useServer", &tmpUseServer);
-            ImGui::SetCursorPosX(xPos);
             if (tmpUseServer)
             {
+                ImGui::SetCursorPosX(xPos);
                 ImGui::Text("モジュールを自動で起動するか");
                 ImGui::SetCursorPosX(xPos);
                 ImGui::Checkbox("##autoStartModules", &tmpAutoStartModules);
+                ImGui::SetCursorPosX(xPos);
+                if (ImGui::Button("モジュールの管理"))
+                {
+                    showModuleManager = true;
+                }
                 ImGui::SetCursorPosX(xPos);
                 ImGui::Text("WebSocketサーバー ポート番号:");
                 ImGui::SetCursorPosX(xPos);

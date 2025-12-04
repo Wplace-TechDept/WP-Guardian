@@ -192,222 +192,147 @@ void ImWS::on_message(websocketpp::connection_hdl hdl, server::message_ptr msg)
     {
         json j = json::parse(msg->get_payload());
 
-        if (j.contains("createWindow"))
+        // command / payload 形式
+        std::string cmd = j.value("command", "");
+        json payload = j.value("payload", j); // payload が無ければ互換性のために j をそのまま使う
+
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        if (cmd == "createWindow")
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
             WindowState window;
             window.visible = true;
             window.marked_for_delete = false;
-            std::string win_title = j.value("createWindow", "Default");
+            std::string win_title = payload.value("title", "Default");
 
-            if (j.contains("widgets"))
+            if (payload.contains("widgets"))
             {
-                for (const auto &widget : j["widgets"])
+                for (const auto& widget : payload["widgets"])
                 {
                     std::string type = widget.value("type", "");
                     std::string id = widget.value("id", "");
-                    if (type == "text")
-                    {
-                        window.widgets.push_back(TextWidget{id, widget.value("content", "")});
-                    }
-                    else if (type == "button")
-                    {
-                        window.widgets.push_back(ButtonWidget{id, widget.value("label", "")});
-                    }
-                    else if (type == "slider")
-                    {
-                        window.widgets.push_back(SliderWidget{id, widget.value("label", ""), widget.value("value", 0.0f), widget.value("min", 0.0f), widget.value("max", 1.0f)});
-                    }
-                    else if (type == "checkbox")
-                    {
-                        window.widgets.push_back(CheckboxWidget{id, widget.value("value", false), widget.value("label", "")});
-                    }
-                    else if (type == "inputtext")
-                    {
-                        window.widgets.push_back(InputTextWidget{id, widget.value("value", ""), widget.value("label", "")});
-                    }
-                    else if (type == "combobox")
-                    {
-                        window.widgets.push_back(ComboBoxWidget{id, widget.value("value", 0), widget.value("items", std::vector<std::string>()), widget.value("label", "")});
-                    }
-                    else if (type == "inputint")
-                    {
-                        window.widgets.push_back(InputInt{id, widget.value("value", 0), widget.value("label", "")});
-                    }
-                    else if (type == "inputfloat")
-                    {
-                        window.widgets.push_back(InputFloat{ id, widget.value("value", 0.0f), widget.value("label", "")});
-                    }
+                    if (type == "text") window.widgets.push_back(TextWidget{ id, widget.value("content","") });
+                    else if (type == "button") window.widgets.push_back(ButtonWidget{ id, widget.value("label","") });
+                    else if (type == "slider") window.widgets.push_back(SliderWidget{ id, widget.value("label",""), widget.value("value",0.0f), widget.value("min",0.0f), widget.value("max",1.0f) });
+                    else if (type == "checkbox") window.widgets.push_back(CheckboxWidget{ id, widget.value("value",false), widget.value("label","") });
+                    else if (type == "inputtext") window.widgets.push_back(InputTextWidget{ id, widget.value("value",""), widget.value("label","") });
+                    else if (type == "combobox") window.widgets.push_back(ComboBoxWidget{ id, widget.value("value",0), widget.value("items", std::vector<std::string>()), widget.value("label","") });
+                    else if (type == "inputint") window.widgets.push_back(InputInt{ id, widget.value("value",0), widget.value("label","") });
+                    else if (type == "inputfloat") window.widgets.push_back(InputFloat{ id, widget.value("value",0.0f), widget.value("label","") });
                 }
             }
-            
 
             windows[{hdl, win_title}] = window;
             std::cout << "Updated window: " << win_title << std::endl;
         }
-        else if (j.contains("deleteWindow")) {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            std::string win_title = j.value("deleteWindow", "default");
-            auto& window = windows[{ hdl, win_title }];
-			window.marked_for_delete = true;
-            
+        else if (cmd == "deleteWindow")
+        {
+            std::string win_title = payload.value("title", "default");
+            auto& window = windows[{hdl, win_title}];
+            window.marked_for_delete = true;
         }
-        else if (j.contains("updateWindow")) {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            std::string win_title = j.value("updateWindow", "default");
-            auto& window = windows[{ hdl,win_title }];
+        else if (cmd == "updateWindow")
+        {
+            std::string win_title = payload.value("title", "default");
+            auto& window = windows[{hdl, win_title}];
 
-            if (j.contains("widgets"))
+            if (payload.contains("widgets"))
             {
-                for (const auto& newWidget : j["widgets"])
+                for (const auto& newWidget : payload["widgets"])
                 {
                     std::string id = newWidget.value("id", "");
-                    auto* widget_ptr = find_widget_by_id_any(window.widgets, id); // ポインタを受け取る
-                    if (widget_ptr) {
-                        Widget& widget = *widget_ptr;  // 参照に変換
-                        if (std::holds_alternative<TextWidget>(widget)) {
-							auto& w = std::get<TextWidget>(widget);
-							w.content = newWidget.value("content", w.content);
-                        }
-                        else if (std::holds_alternative<ButtonWidget>(widget)) {
-							auto& w = std::get<ButtonWidget>(widget);
-                            w.label = newWidget.value("label", w.label);
-                        }
-						else if (std::holds_alternative<SliderWidget>(widget)) {
-                            auto& w = std::get<SliderWidget>(widget);
-                            w.value = newWidget.value("value", w.value);
-                            w.min_val = newWidget.value("min", w.min_val);
-							w.max_val = newWidget.value("max", w.max_val);
-                        }
-                        else if (std::holds_alternative<CheckboxWidget>(widget)) {
-                            auto& w = std::get<CheckboxWidget>(widget);
-                            w.value = newWidget.value("value", w.value);
-                            w.label = newWidget.value("label", w.label);
-                        }
-                        else if (std::holds_alternative<InputTextWidget>(widget)) {
-                            auto& w = std::get<InputTextWidget>(widget);
-                            w.value = newWidget.value("value", w.value);
-                            w.label = newWidget.value("label", w.label);
-                        }
-                        else if (std::holds_alternative<ComboBoxWidget>(widget)) {
-                            auto& w = std::get<ComboBoxWidget>(widget);
-                            w.value = newWidget.value("value", w.value);
-                            w.items = newWidget.value("items", w.items);
-                            w.label = newWidget.value("label", w.label);
-                        }
-                        else if (std::holds_alternative<InputInt>(widget)) {
-                            auto& w = std::get<InputInt>(widget);
-                            w.value = newWidget.value("value", w.value);
-                        }
-                        else if (std::holds_alternative<InputFloat>(widget)) {
-                            auto& w = std::get<InputFloat>(widget);
-                            w.value = newWidget.value("value", w.value);
-						}
+                    auto* widget_ptr = find_widget_by_id_any(window.widgets, id);
+                    if (!widget_ptr) continue;
+
+                    Widget& widget = *widget_ptr;
+                    if (std::holds_alternative<TextWidget>(widget)) {
+                        auto& w = std::get<TextWidget>(widget); w.content = newWidget.value("content", w.content);
+                    }
+                    else if (std::holds_alternative<ButtonWidget>(widget)) {
+                        auto& w = std::get<ButtonWidget>(widget); w.label = newWidget.value("label", w.label);
+                    }
+                    else if (std::holds_alternative<SliderWidget>(widget)) {
+                        auto& w = std::get<SliderWidget>(widget); w.value = newWidget.value("value", w.value); w.min_val = newWidget.value("min", w.min_val); w.max_val = newWidget.value("max", w.max_val);
+                    }
+                    else if (std::holds_alternative<CheckboxWidget>(widget)) {
+                        auto& w = std::get<CheckboxWidget>(widget); w.value = newWidget.value("value", w.value); w.label = newWidget.value("label", w.label);
+                    }
+                    else if (std::holds_alternative<InputTextWidget>(widget)) {
+                        auto& w = std::get<InputTextWidget>(widget); w.value = newWidget.value("value", w.value); w.label = newWidget.value("label", w.label);
+                    }
+                    else if (std::holds_alternative<ComboBoxWidget>(widget)) {
+                        auto& w = std::get<ComboBoxWidget>(widget); w.value = newWidget.value("value", w.value); w.items = newWidget.value("items", w.items); w.label = newWidget.value("label", w.label);
+                    }
+                    else if (std::holds_alternative<InputInt>(widget)) {
+                        auto& w = std::get<InputInt>(widget); w.value = newWidget.value("value", w.value);
+                    }
+                    else if (std::holds_alternative<InputFloat>(widget)) {
+                        auto& w = std::get<InputFloat>(widget); w.value = newWidget.value("value", w.value);
                     }
                 }
             }
-            
         }
-        else if (j.contains("createWidget"))
+        else if (cmd == "createWidget" || cmd == "deleteWidget")
         {
-			std::lock_guard<std::mutex> lock(m_mutex);
-            std::string win_title = j.value("createWidget", "default");
-            auto& window = windows[{ hdl, win_title }];
-            if (j.contains("widgets"))
-            {
-                for (const auto& widget : j["widgets"])
+            std::string win_title = payload.value("title", "default");
+            auto& window = windows[{hdl, win_title}];
+
+            if (!payload.contains("widgets")) return;
+
+            if (cmd == "createWidget") {
+                for (const auto& widget : payload["widgets"])
                 {
                     std::string type = widget.value("type", "");
                     std::string id = widget.value("id", "");
-                    if (type == "text")
-                    {
-                        window.widgets.push_back(TextWidget{id, widget.value("content", "")});
-                    }
-                    else if (type == "button")
-                    {
-                        window.widgets.push_back(ButtonWidget{id, widget.value("label", "")});
-                    }
-                    else if (type == "slider")
-                    {
-                        window.widgets.push_back(SliderWidget{id, widget.value("label", ""), widget.value("value", 0.0f), widget.value("min", 0.0f), widget.value("max", 1.0f)});
-                    }
-                    else if (type == "checkbox")
-                    {
-                        window.widgets.push_back(CheckboxWidget{id, widget.value("value", false), widget.value("label", "")});
-                    }
-                    else if (type == "inputtext")
-                    {
-                        window.widgets.push_back(InputTextWidget{id, widget.value("value", ""), widget.value("label", "")});
-                    }
-                    else if (type == "combobox")
-                    {
-                        window.widgets.push_back(ComboBoxWidget{id, widget.value("value", 0), widget.value("items", std::vector<std::string>()), widget.value("label", "")});
-                    }
-                    else if (type == "inputint")
-                    {
-                        window.widgets.push_back(InputInt{id, widget.value("value", 0), widget.value("label", "") });
-                    }
-                    else if (type == "inputfloat")
-                    {
-                        window.widgets.push_back(InputFloat{ id, widget.value("value", 0.0f), widget.value("label", "") });
-                    }
+                    if (type == "text") window.widgets.push_back(TextWidget{ id, widget.value("content","") });
+                    else if (type == "button") window.widgets.push_back(ButtonWidget{ id, widget.value("label","") });
+                    else if (type == "slider") window.widgets.push_back(SliderWidget{ id, widget.value("label",""), widget.value("value",0.0f), widget.value("min",0.0f), widget.value("max",1.0f) });
+                    else if (type == "checkbox") window.widgets.push_back(CheckboxWidget{ id, widget.value("value",false), widget.value("label","") });
+                    else if (type == "inputtext") window.widgets.push_back(InputTextWidget{ id, widget.value("value",""), widget.value("label","") });
+                    else if (type == "combobox") window.widgets.push_back(ComboBoxWidget{ id, widget.value("value",0), widget.value("items", std::vector<std::string>()), widget.value("label","") });
+                    else if (type == "inputint") window.widgets.push_back(InputInt{ id, widget.value("value",0), widget.value("label","") });
+                    else if (type == "inputfloat") window.widgets.push_back(InputFloat{ id, widget.value("value",0.0f), widget.value("label","") });
                 }
-			}
-        }
-        else if (j.contains("deleteWidget"))
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            std::string win_title = j.value("deleteWidget", "default");
-            auto& window = windows[{ hdl, win_title }];
-            if (j.contains("widgets"))
-            {
-                for (const auto& deleteWidget : j["widgets"])
+            }
+            else { // deleteWidget
+                for (const auto& delWidget : payload["widgets"])
                 {
-					std::string id = deleteWidget.value("id", "");
+                    std::string id = delWidget.value("id", "");
                     auto* widget_ptr = find_widget_by_id_any(window.widgets, id);
-                    if (widget_ptr) 
-                    {
-                        auto it = std::find(window.widgets.begin(), window.widgets.end(), *widget_ptr);
-                        if (it != window.widgets.end()) {
-                            window.widgets.erase(it);
-                        }
-                    }
-
+                    if (!widget_ptr) continue;
+                    auto it = std::find(window.widgets.begin(), window.widgets.end(), *widget_ptr);
+                    if (it != window.widgets.end()) window.widgets.erase(it);
                 }
             }
         }
-        else if (j.contains("getVariable"))
+        else if (cmd == "getVariable")
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            std::string name = j.value("getVariable", "");
+            std::string name = payload.value("name", "");
             auto it = m_readonly_vars.find(name);
             if (it != m_readonly_vars.end())
             {
                 json response = it->second();
                 safe_send(hdl, response);
             }
-            else
-            {
+            else {
                 std::cerr << "Requested variable not found: " << name << std::endl;
             }
         }
-        else if (j.contains("setVariable"))
+        else if (cmd == "setVariable")
         {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            std::string name = j.value("setVariable", "");
-			auto it = m_writable_vars.find(name);
+            std::string name = payload.value("name", "");
+            auto it = m_writable_vars.find(name);
             if (it != m_writable_vars.end())
             {
-                json j_value = { {"value",j["value"]}};
+                json j_value = { {"value", payload["value"]} };
                 it->second(j_value);
             }
-            else
-            {
+            else {
                 std::cerr << "Requested variable not found or not writable: " << name << std::endl;
-			}
+            }
         }
     }
-    catch (const std::exception &e)
+    catch (const std::exception& e)
     {
         std::cerr << "JSON parse error: " << e.what() << std::endl;
     }

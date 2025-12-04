@@ -137,23 +137,29 @@ class Window:
     def to_json(self):
         msgs = []
 
-        # ウィンドウ削除（これだけは最優先でreturnしてOK）
+        # ウィンドウ削除
         if self.marked_for_delete:
-            msgs.append(json.dumps({"deleteWindow": self.name}, indent=4))
+            msgs.append(json.dumps({
+                "command": "deleteWindow",
+                "payload": {"title": self.name}
+            }, indent=4))
             return msgs
 
-        # --- 新規ウィジェット ---
+        # 新規ウィジェット
         if self.new_widgets:
             msg_type = "createWindow" if self.is_first else "createWidget"
             self.is_first = False
             msgs.append(json.dumps({
-                msg_type: self.name,
-                "widgets": [w.to_json() for w in self.new_widgets]
+                "command": msg_type,
+                "payload": {
+                    "title": self.name,
+                    "widgets": [w.to_json() for w in self.new_widgets]
+                }
             }, indent=4))
             self.widgets += self.new_widgets
             self.new_widgets = []
 
-        # --- 更新 ---
+        # 更新
         if self.updated_widgets:
             for uw in self.updated_widgets:
                 for i, w in enumerate(self.widgets):
@@ -162,21 +168,28 @@ class Window:
                             setattr(self.widgets[i], attr, val)
                         break
             msgs.append(json.dumps({
-                "updateWindow": self.name,
-                "widgets": [w.to_json() for w in self.updated_widgets]
+                "command": "updateWindow",
+                "payload": {
+                    "title": self.name,
+                    "widgets": [w.to_json() for w in self.updated_widgets]
+                }
             }, indent=4))
             self.updated_widgets = []
 
-        # --- 削除 ---
+        # 削除
         if self.deleted_widgets:
             msgs.append(json.dumps({
-                "deleteWidget": self.name,
-                "widgets": [{"id": wid} for wid in self.deleted_widgets]
+                "command": "deleteWidget",
+                "payload": {
+                    "title": self.name,
+                    "widgets": [{"id": wid} for wid in self.deleted_widgets]
+                }
             }, indent=4))
             self.widgets = [w for w in self.widgets if w.id not in self.deleted_widgets]
             self.deleted_widgets = []
 
         return msgs
+
     async def send_json(self,ws):
         msgs = self.to_json()
         if msgs:
