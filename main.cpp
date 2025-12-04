@@ -37,7 +37,7 @@ std::atomic<bool> running{ true };
 using json = nlohmann::json;
 // アプリバージョン
 
-const std::string APP_VERSION = "v2.1.0"; //バージョン更新時にかならず書き換える
+const std::string APP_VERSION = "v2.1.1"; //バージョン更新時にかならず書き換える
 
 
 // --- 設定などグローバル変数 ---
@@ -144,41 +144,52 @@ void checkUpdate() {
     
 }
 bool showVersion = foundUpdate && showUpdateMessage;
-
 void showVersionWindow() {
     if (!showVersion) return;
-    if (!ImGui::Begin("バージョン", &showVersion)) {
-        ImGui::End();
-        return;
+
+    static bool opened = false;
+    if (!opened) {
+        ImGui::OpenPopup("バージョン");
+        opened = true;
     }
+
     static bool loadedUpdate = false;
-    if (!loadedUpdate) {
-        checkUpdate();
-        loadedUpdate = true;
-    }
-    if (foundUpdate) {
-        ImGui::Text("新しいバージョンがあります！ 最新バージョン: %s", latestVersion.c_str());
-    }
-    else {
-        ImGui::Text("既に最新バージョンです！%s",APP_VERSION.c_str());
-    }
-    if (ImGui::Button("アップデートページを開く")) {
-        ShellExecuteA(NULL, "open", updateURL.c_str(), NULL, NULL, SW_SHOWNORMAL);
-    }
-    // 内部フラグは hideUpdateMessage（trueなら非表示）
-    bool hideUpdateMessage = !showUpdateMessage;
+    if (ImGui::BeginPopupModal("バージョン", &showVersion, ImGuiWindowFlags_AlwaysAutoResize)) {
 
-    // UI 側で反転させて渡す
-    if (ImGui::Checkbox("このメッセージを再度表示しない", &hideUpdateMessage)) {
-        showUpdateMessage = !hideUpdateMessage; // 内部フラグに反映
+        static bool loadedUpdate = false;
+        if (!loadedUpdate) {
+            checkUpdate();
+            loadedUpdate = true;
+        }
+
+        if (foundUpdate) {
+            ImGui::Text("新しいバージョンがあります！ 最新バージョン: %s", latestVersion.c_str());
+        }
+        else {
+            ImGui::Text("既に最新バージョンです！ %s", APP_VERSION.c_str());
+        }
+
+        if (ImGui::Button("アップデートページを開く")) {
+            ShellExecuteA(NULL, "open", updateURL.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        }
+
+        bool hideUpdateMessage = !showUpdateMessage;
+        if (ImGui::Checkbox("このメッセージを再度表示しない", &hideUpdateMessage))
+            showUpdateMessage = !hideUpdateMessage;
+
+        if (ImGui::Button("閉じる")) {
+            showVersion = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
 
-    ImGui::End();
     if (!showVersion) {
+        opened = false;
         loadedUpdate = false;
     }
 }
-
 
 void SetupConsoleIfDebug()
 {
@@ -248,54 +259,48 @@ void ShowModuleManagerWindow()
         loaded = true;
     }
 
+    // ★ 子ウィンドウ（スクロール領域）追加！
+    ImGui::BeginChild("ModuleListArea", ImVec2(0, 400), true);
+
     if (moduleList.contains("modules") && moduleList["modules"].is_array())
     {
-        // 削除用に保持しておくインデックス
         int deleteIndex = -1;
 
         for (size_t i = 0; i < moduleList["modules"].size(); ++i)
         {
             auto& module = moduleList["modules"][i];
 
-            // enabled チェックボックス
             bool enabled = module.value("enabled", true);
             if (ImGui::Checkbox(("有効##" + std::to_string(i)).c_str(), &enabled))
                 module["enabled"] = enabled;
 
-            // 名前編集
             char nameBuf[128];
             strncpy(nameBuf, module.value("name", "").c_str(), sizeof(nameBuf));
             if (ImGui::InputText(("名前##" + std::to_string(i)).c_str(), nameBuf, sizeof(nameBuf)))
                 module["name"] = std::string(nameBuf);
 
-            // コマンド編集
             char cmdBuf[256];
             strncpy(cmdBuf, module.value("command", "").c_str(), sizeof(cmdBuf));
             if (ImGui::InputText(("コマンド##" + std::to_string(i)).c_str(), cmdBuf, sizeof(cmdBuf)))
                 module["command"] = std::string(cmdBuf);
 
-            // 削除ボタン
             ImGui::SameLine();
             if (ImGui::Button(("削除##" + std::to_string(i)).c_str()))
-            {
-                deleteIndex = (int)i; // 後で削除
-            }
+                deleteIndex = (int)i;
 
             ImGui::Separator();
         }
 
-        // 実際に削除（ループ中にeraseすると問題になるため後で）
         if (deleteIndex != -1)
-        {
             moduleList["modules"].erase(moduleList["modules"].begin() + deleteIndex);
-        }
     }
     else
     {
         ImGui::Text("moduleList.jsonに何も書かれていません");
     }
 
-    // 新規追加ボタン
+    ImGui::EndChild(); // ★ ここでスクロール領域終了！
+
     if (ImGui::Button("新しいモジュールを追加"))
     {
         json newModule = {
@@ -306,7 +311,6 @@ void ShowModuleManagerWindow()
         moduleList["modules"].push_back(newModule);
     }
 
-    // 保存ボタン
     if (ImGui::Button("セーブ"))
     {
         if (SaveModuleList())
@@ -321,6 +325,7 @@ void ShowModuleManagerWindow()
         loaded = false;
     }
 }
+
 
 void LaunchModules()
 {
@@ -939,6 +944,9 @@ int main()
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
     ImGui::StyleColorsDark();
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.60f);
 
     ImFontConfig font_cfg{};
     font_cfg.FontDataOwnedByAtlas = true;
