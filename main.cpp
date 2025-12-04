@@ -136,6 +136,8 @@ void checkUpdate() {
         else {
             std::cout << "最新です" << std::endl;
             foundUpdate = false;
+            latestVersion = latest;
+            updateURL = "https://github.com/Kikumon-Tech/WP-Guardian/releases/tag/" + latest;
             showUpdateMessage = true;
         }
     }
