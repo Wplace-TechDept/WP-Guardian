@@ -37,7 +37,7 @@ std::atomic<bool> running{ true };
 using json = nlohmann::json;
 // アプリバージョン
 
-const std::string APP_VERSION = "v2.1.1"; //バージョン更新時にかならず書き換える
+const std::string APP_VERSION = "v2.1.2"; //バージョン更新時にかならず書き換える
 
 
 // --- 設定などグローバル変数 ---
@@ -63,12 +63,11 @@ static DiffPattern diffPattern(DiffPatternType::ColorMask);
 static ImVec4 MaskColor = ImVec4(0, 1, 0, 1);
 
 static std::string szFile = "assets\\template.png";
-char szFileBuffer[MAX_PATH] = { 0 };
 std::string szFileStr;
 
 static bool autoStartModules = false;
 static bool useServer = true;
-static std::string serverIP = "127.0.0.1";  // すべてのネットワークインターフェイスで受け付ける
+static std::string serverIP = "127.0.0.1";
 static unsigned short serverPort = 9002;
 
 static bool foundUpdate = false;
@@ -993,10 +992,10 @@ int main()
         checkUpdate();
     }
     showVersion = foundUpdate && showUpdateMessage;
-    // szFileBufferにszFileの値をコピーして、ImGuiの初期値を設定
-    strncpy(szFileBuffer, szFile.c_str(), MAX_PATH - 1);
-    szFileBuffer[MAX_PATH - 1] = '\0';
+
 	szFileStr = szFile;
+
+    std::mutex imgMutex;
 
     cv::Mat originalImg = cv::imread(szFile, cv::IMREAD_UNCHANGED);
     if (originalImg.empty())
@@ -1017,11 +1016,13 @@ int main()
     GLuint diffTexID = matToTexture(emptyDiff);
 	std::string diffBase64 = MatToBase64(emptyDiff);
 
-	imws.register_readonly_variable("width", width);
-	imws.register_readonly_variable("height", height);
-	imws.register_readonly_variable("originalImage", originalBase64);
-	imws.register_readonly_variable("realtimeImage", realtimeBase64);
-	imws.register_readonly_variable("diffImage", diffBase64);
+	imws.register_readonly_variable("width", width, imgMutex);
+	imws.register_readonly_variable("height", height, imgMutex);
+	imws.register_readonly_variable("originalImage", originalBase64, imgMutex);
+	imws.register_readonly_variable("realtimeImage", realtimeBase64, imgMutex);
+	imws.register_readonly_variable("diffImage", diffBase64, imgMutex);
+
+    static std::mutex tmp_mutex;
 
     static int tmpTile_x = tile_x;
     static int tmpTile_y = tile_y;
@@ -1040,45 +1041,47 @@ int main()
 	static bool tmpUseServer = useServer;
 
 
-	imws.register_writable_variable("tmpTile_x", tmpTile_x);
-	imws.register_writable_variable("tmpTile_y", tmpTile_y);
-	imws.register_writable_variable("tmpPixel_x", tmpPixel_x);
-	imws.register_writable_variable("tmpPixel_y", tmpPixel_y);
-	imws.register_writable_variable("tmpUpdateSpeed", tmpUpdateSpeed);
-	imws.register_writable_variable("tmpDiffPattern", tmpDiffPattern);
-	imws.register_writable_variable("tmpMaskColor", tmpMaskColor);
-    imws.register_writable_variable("tmpPath", szFileStr);
+	imws.register_writable_variable("tmpTile_x", tmpTile_x, tmp_mutex);
+	imws.register_writable_variable("tmpTile_y", tmpTile_y, tmp_mutex);
+	imws.register_writable_variable("tmpPixel_x", tmpPixel_x, tmp_mutex);
+	imws.register_writable_variable("tmpPixel_y", tmpPixel_y, tmp_mutex);
+	imws.register_writable_variable("tmpUpdateSpeed", tmpUpdateSpeed, tmp_mutex);
+	imws.register_writable_variable("tmpDiffPattern", tmpDiffPattern, tmp_mutex);
+	imws.register_writable_variable("tmpMaskColor", tmpMaskColor, tmp_mutex);
+    imws.register_writable_variable("tmpPath", szFileStr, tmp_mutex);
 
 
-    imws.register_readonly_variable("tmpTile_x", tmpTile_x);
-	imws.register_readonly_variable("tmpTile_y", tmpTile_y);
-	imws.register_readonly_variable("tmpPixel_x", tmpPixel_x);
-	imws.register_readonly_variable("tmpPixel_y", tmpPixel_y);
-	imws.register_readonly_variable("tmpUpdateSpeed", tmpUpdateSpeed);
-	imws.register_readonly_variable("tmpDiffPattern", tmpDiffPattern);
-	imws.register_readonly_variable("tmpMaskColor", tmpMaskColor);
-	imws.register_readonly_variable("tmpPath", szFileStr);
+    imws.register_readonly_variable("tmpTile_x", tmpTile_x, tmp_mutex);
+	imws.register_readonly_variable("tmpTile_y", tmpTile_y, tmp_mutex);
+	imws.register_readonly_variable("tmpPixel_x", tmpPixel_x, tmp_mutex);
+	imws.register_readonly_variable("tmpPixel_y", tmpPixel_y, tmp_mutex);
+	imws.register_readonly_variable("tmpUpdateSpeed", tmpUpdateSpeed, tmp_mutex);
+	imws.register_readonly_variable("tmpDiffPattern", tmpDiffPattern, tmp_mutex);
+	imws.register_readonly_variable("tmpMaskColor", tmpMaskColor, tmp_mutex);
+	imws.register_readonly_variable("tmpPath", szFileStr, tmp_mutex);
 
+	static std::mutex settings_mutex;
 
-	imws.register_readonly_variable("tile_x", tile_x);
-	imws.register_readonly_variable("tile_y", tile_y);
-	imws.register_readonly_variable("pixel_x", pixel_x);
-	imws.register_readonly_variable("pixel_y", pixel_y);
-	imws.register_readonly_variable("UpdateSpeed", UpdateSpeed);
-	imws.register_readonly_variable("diffPattern", diffPattern);
-	imws.register_readonly_variable("MaskColor", MaskColor);
-	imws.register_readonly_variable("path", szFile);
+	imws.register_readonly_variable("tile_x", tile_x, settings_mutex);
+	imws.register_readonly_variable("tile_y", tile_y, settings_mutex);
+	imws.register_readonly_variable("pixel_x", pixel_x, settings_mutex);
+	imws.register_readonly_variable("pixel_y", pixel_y, settings_mutex);
+	imws.register_readonly_variable("UpdateSpeed", UpdateSpeed, settings_mutex);
+	imws.register_readonly_variable("diffPattern", diffPattern, settings_mutex);
+	imws.register_readonly_variable("MaskColor", MaskColor, settings_mutex);
+	imws.register_readonly_variable("path", szFile, settings_mutex);
+
+	static std::mutex info_mutex;
 
     double diffPercent = 0.0;
     int totalOpaquePixels = 0;
     int changedPixels = 0;
 
-	imws.register_readonly_variable("totalPixels", totalOpaquePixels);
-	imws.register_readonly_variable("wrongPixels", changedPixels);
+	imws.register_readonly_variable("totalPixels", totalOpaquePixels, info_mutex);
+	imws.register_readonly_variable("wrongPixels", changedPixels, info_mutex);
 
-    imws.register_readonly_variable("diffPercent", diffPercent);
+    imws.register_readonly_variable("diffPercent", diffPercent, info_mutex);
 
-    std::mutex imgMutex;
     std::condition_variable cv_newFrame;
     bool newFrameReady = false;
 
@@ -1096,21 +1099,36 @@ int main()
     bool isPanningDiff = false;
     ImVec2 lastMouseDiff;
 
+	static std::mutex update_mutex;
 	bool update = false;
-	imws.register_writable_variable("update", update);
+	imws.register_writable_variable("update", update, update_mutex);
 
     std::thread updateThread([&]()
                              {
         while(!stopThread){
-            cv::Mat newImg = fetch_tiles_and_crop_cpp(tile_x,tile_y,pixel_x,pixel_y,width,height);
+            cv::Mat newImg;
+			int localTile_x, localTile_y, localPixel_x, localPixel_y, localWidth, localHeight;
+            {
+                std::scoped_lock lock(settings_mutex, imgMutex);
+                localTile_x = tile_x;
+                localTile_y = tile_y;
+                localPixel_x = pixel_x;
+				localPixel_y = pixel_y;
+                localWidth = width;
+				localHeight = height;
+            }
+            newImg = fetch_tiles_and_crop_cpp(localTile_x, localTile_y, localPixel_x, localPixel_y, localWidth, localHeight);
             if (!newImg.empty()) {
                 newImg = applyAlphaMask(newImg, originalImg);
                 std::lock_guard<std::mutex> lock(imgMutex);
                 realtimeImg = newImg.clone();
                 auto [diffImg, totalOpaque, changed] = imageDifferenceSafe(originalImg, realtimeImg, diffPattern);
-                diffPercent = (totalOpaque > 0) ? (double)changed / totalOpaque * 100.0 : 0.0;
-                totalOpaquePixels = totalOpaque;
-                changedPixels = changed;
+                {
+					std::lock_guard<std::mutex> lock(info_mutex);
+                    diffPercent = (totalOpaque > 0) ? (double)changed / totalOpaque * 100.0 : 0.0;
+                    totalOpaquePixels = totalOpaque;
+                    changedPixels = changed;
+                }
 
                 emptyDiff = diffImg.clone();
                 newFrameReady = true;
@@ -1448,36 +1466,56 @@ int main()
             float windowWidth = ImGui::GetContentRegionAvail().x;
             float itemWidth = ImGui::GetContentRegionAvail().x * 0.9f;
             float xPos = (windowWidth - itemWidth) * 0.5f;
-
+			int local_tmp_tile_x;
+			int local_tmp_tile_y;
+			int local_tmp_pixel_x;
+			int local_tmp_pixel_y;
+			float local_tmp_update_speed;
+			bool local_tmp_is_link_zoom;
+			DiffPattern local_tmp_diff_pattern;
+			ImVec4 local_tmp_mask_color;
+			char local_szFileBuffer[MAX_PATH];
+            {
+                std::lock_guard<std::mutex> lock(tmp_mutex);
+				local_tmp_tile_x = tmpTile_x;
+				local_tmp_tile_y = tmpTile_y;
+				local_tmp_pixel_x = tmpPixel_x;
+				local_tmp_pixel_y = tmpPixel_y;
+				local_tmp_update_speed = tmpUpdateSpeed;
+				local_tmp_is_link_zoom = tmpIsLinkZoom;
+				local_tmp_diff_pattern = tmpDiffPattern;
+				local_tmp_mask_color = tmpMaskColor;
+				strncpy(local_szFileBuffer, szFileStr.c_str(), MAX_PATH - 1);
+				local_szFileBuffer[MAX_PATH - 1] = '\0';
+            }
             ImGui::SetCursorPosX(xPos);
             ImGui::PushFont(bigFont);
             ImGui::Text("座標");
             ImGui::PopFont();
             ImGui::PushItemWidth(itemWidth);
             ImGui::SetCursorPosX(xPos);
-            ImGui::InputInt("Tl X", &tmpTile_x);
+            ImGui::InputInt("Tl X", &local_tmp_tile_x);
             ImGui::SetCursorPosX(xPos);
-            ImGui::InputInt("Tl Y", &tmpTile_y);
+            ImGui::InputInt("Tl Y", &local_tmp_tile_y);
             ImGui::SetCursorPosX(xPos);
-            ImGui::InputInt("Px X", &tmpPixel_x);
+            ImGui::InputInt("Px X", &local_tmp_pixel_x);
             ImGui::SetCursorPosX(xPos);
-            ImGui::InputInt("Px Y", &tmpPixel_y);
+            ImGui::InputInt("Px Y", &local_tmp_pixel_y);
             ImGui::PopItemWidth();
             ImGui::Spacing();
-
             ImGui::SetCursorPosX(xPos);
             ImGui::PushFont(bigFont);
             ImGui::Text("更新間隔");
             ImGui::PopFont();
             ImGui::PushItemWidth(itemWidth);
             ImGui::SetCursorPosX(xPos);
-            ImGui::InputFloat("秒", &tmpUpdateSpeed, 0.1f, 1.0f, "%.1f");
+            ImGui::InputFloat("秒", &local_tmp_update_speed, 0.1f, 1.0f, "%.1f");
             ImGui::PopItemWidth();
             ImGui::Spacing();
 
             ImGui::PushItemWidth(itemWidth);
             ImGui::SetCursorPosX(xPos);
-            ImGui::Checkbox("リンク拡大", &tmpIsLinkZoom);
+            ImGui::Checkbox("リンク拡大", &local_tmp_is_link_zoom);
             ImGui::PopItemWidth();
             ImGui::Spacing();
 
@@ -1487,12 +1525,12 @@ int main()
             ImGui::PopFont();
             ImGui::PushItemWidth(itemWidth);
             ImGui::SetCursorPosX(xPos);
-            ImGui::Combo("##差分形式", (int *)&tmpDiffPattern.type, "差分計算表示\0差分部分を強調色\0差分以外をテンプレ表示\0");
+            ImGui::Combo("##差分形式", (int *)&local_tmp_diff_pattern.type, "差分計算表示\0差分部分を強調色\0差分以外をテンプレ表示\0");
 
             ImGui::PopItemWidth();
             ImGui::Spacing();
 
-            if (tmpDiffPattern.type == DiffPatternType::ColorMask || tmpDiffPattern.type == DiffPatternType::OverlayTemplate)
+            if (local_tmp_diff_pattern.type == DiffPatternType::ColorMask || local_tmp_diff_pattern.type == DiffPatternType::OverlayTemplate)
             {
                 ImGui::SetCursorPosX(xPos);
                 ImGui::PushFont(bigFont);
@@ -1500,7 +1538,7 @@ int main()
                 ImGui::PopFont();
                 ImGui::PushItemWidth(itemWidth);
                 ImGui::SetCursorPosX(xPos);
-                ImGui::ColorEdit4("##マスク色", (float *)&tmpMaskColor, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                ImGui::ColorEdit4("##マスク色", (float *)&local_tmp_mask_color, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                 ImGui::PopItemWidth();
                 ImGui::Spacing();
             }
@@ -1511,17 +1549,9 @@ int main()
             ImGui::PopFont();
             ImGui::PushItemWidth(itemWidth - 80); // ボタン幅80px確保
             ImGui::SetCursorPosX(xPos);
-            // szFileBufferを使用
-            if (ImGui::InputText("##画像保存先", szFileBuffer, MAX_PATH))
-            {
-				szFileStr = szFileBuffer;
-            }
-            else
-            {
-                strncpy(szFileBuffer, szFileStr.c_str(), MAX_PATH - 1);
-                szFileBuffer[MAX_PATH - 1] = '\0';
 
-            }
+            ImGui::InputText("##画像保存先", local_szFileBuffer, MAX_PATH);
+
             ImGui::PopItemWidth();
 
             ImGui::SameLine();
@@ -1536,77 +1566,98 @@ int main()
                 ofn.hwndOwner = hwnd;
 
                 // ImGuiバッファを使用
-                ofn.lpstrFile = szFileBuffer;
-                ofn.nMaxFile = sizeof(szFileBuffer);
+                ofn.lpstrFile = local_szFileBuffer;
+                ofn.nMaxFile = sizeof(local_szFileBuffer);
                 ofn.lpstrFilter = "PNG Files\0*.png\0JPEG Files\0*.jpg;*.jpeg\0All Files\0*.*\0";
                 ofn.nFilterIndex = 1;
                 ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
                 if (GetOpenFileName(&ofn))
                 {
-                    // ダイアログでパスが選択されたら、std::string変数にコピー
-                    szFileStr = szFileBuffer;
+                    local_szFileBuffer[MAX_PATH - 1] = '\0'; // 念のため終端
                 }
             }
-            ImGui::Spacing();
 
-            ImGui::SetCursorPosX(xPos);
-            if (ImGui::Button("更新", ImVec2(itemWidth, 0)) || update)
             {
-                std::lock_guard<std::mutex> lock(imgMutex);
+                std::lock_guard<std::mutex> lock(tmp_mutex);
+				tmpTile_x = local_tmp_tile_x;
+				tmpTile_y = local_tmp_tile_y;
+				tmpPixel_x = local_tmp_pixel_x;
+				tmpPixel_y = local_tmp_pixel_y;
+				tmpUpdateSpeed = local_tmp_update_speed;
+				tmpIsLinkZoom = local_tmp_is_link_zoom;
+				tmpDiffPattern = local_tmp_diff_pattern;
+				tmpMaskColor = local_tmp_mask_color;
+				szFileStr = std::string(local_szFileBuffer);
 
-                // ImGuiバッファからszFileに最新のパスをコピー
-                szFile = szFileStr;
+            }
 
-                if (!szFile.empty())
+            ImGui::Spacing();
+            ImGui::SetCursorPosX(xPos);
+            {
+				std::lock_guard<std::mutex> lock(update_mutex);
+                if (ImGui::Button("更新", ImVec2(itemWidth, 0)) || update)
                 {
-                    cv::Mat newImg = cv::imread(szFile, cv::IMREAD_UNCHANGED);
-                    if (!newImg.empty())
+                    update = false;
+                    // ImGuiバッファからszFileに最新のパスをコピー
                     {
-                        originalImg = newImg.clone();
-                        ensureBGRA(originalImg);
-                        if (originalTexID)
-                            glDeleteTextures(1, &originalTexID);
-                        originalTexID = matToTexture(originalImg);
-						originalBase64 = MatToBase64(originalImg);
-                        width = originalImg.cols;
-                        height = originalImg.rows;
-                        realtimeImg = cv::Mat(height, width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-                        emptyDiff = cv::Mat(height, width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-
-                        if (realtimeTexID)
-                            glDeleteTextures(1, &realtimeTexID);
-                        realtimeTexID = matToTexture(realtimeImg);
-						realtimeBase64 = MatToBase64(realtimeImg);
-
-                        if (diffTexID)
-                            glDeleteTextures(1, &diffTexID);
-                        diffTexID = matToTexture(emptyDiff);
-						diffBase64 = MatToBase64(emptyDiff);
+                        std::scoped_lock lock(tmp_mutex, settings_mutex);
+                        szFile = szFileStr;
                     }
+
+                    if (!szFile.empty())
+                    {
+						std::lock_guard<std::mutex> lock(imgMutex);
+                        cv::Mat newImg = cv::imread(szFile, cv::IMREAD_UNCHANGED);
+                        if (!newImg.empty())
+                        {
+                            originalImg = newImg.clone();
+                            ensureBGRA(originalImg);
+                            if (originalTexID)
+                                glDeleteTextures(1, &originalTexID);
+                            originalTexID = matToTexture(originalImg);
+                            originalBase64 = MatToBase64(originalImg);
+                            width = originalImg.cols;
+                            height = originalImg.rows;
+                            realtimeImg = cv::Mat(height, width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
+                            emptyDiff = cv::Mat(height, width, CV_8UC4, cv::Scalar(0, 0, 0, 0));
+
+                            if (realtimeTexID)
+                                glDeleteTextures(1, &realtimeTexID);
+                            realtimeTexID = matToTexture(realtimeImg);
+                            realtimeBase64 = MatToBase64(realtimeImg);
+
+                            if (diffTexID)
+                                glDeleteTextures(1, &diffTexID);
+                            diffTexID = matToTexture(emptyDiff);
+                            diffBase64 = MatToBase64(emptyDiff);
+                        }
+                    }
+
+                    {
+                        std::scoped_lock lock(tmp_mutex, settings_mutex);
+                        tile_x = tmpTile_x;
+                        tile_y = tmpTile_y;
+                        pixel_x = tmpPixel_x;
+                        pixel_y = tmpPixel_y;
+                        UpdateSpeed = tmpUpdateSpeed;
+                        isLinkZoom = tmpIsLinkZoom;
+
+                        OriginalUV0 = ImVec2(0, 0);
+                        OriginalUV1 = ImVec2(1, 1);
+                        RealtimeUV0 = ImVec2(0, 0);
+                        RealtimeUV1 = ImVec2(1, 1);
+                        DiffUV0 = ImVec2(0, 0);
+                        DiffUV1 = ImVec2(1, 1);
+                        diffPattern = tmpDiffPattern;
+                        MaskColor = tmpMaskColor;
+                    } // ここで自動的に両方アンロック
+
+                    abort_fetch = true;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    abort_fetch = false;
+
                 }
-
-                tile_x = tmpTile_x;
-                tile_y = tmpTile_y;
-                pixel_x = tmpPixel_x;
-                pixel_y = tmpPixel_y;
-                UpdateSpeed = tmpUpdateSpeed;
-                isLinkZoom = tmpIsLinkZoom;
-
-                OriginalUV0 = ImVec2(0, 0);
-                OriginalUV1 = ImVec2(1, 1);
-                RealtimeUV0 = ImVec2(0, 0);
-                RealtimeUV1 = ImVec2(1, 1);
-                DiffUV0 = ImVec2(0, 0);
-                DiffUV1 = ImVec2(1, 1);
-                diffPattern = tmpDiffPattern;
-                MaskColor = tmpMaskColor;
-
-                abort_fetch = true;
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                abort_fetch = false;
-
-				update = false;
             }
             ImGui::End();
         }
@@ -1615,8 +1666,11 @@ int main()
         {
             ImGui::Begin("情報", &showInfo);
             ImGui::PushFont(bigFont);
-            ImGui::Text("差分率: %.2f%%", diffPercent);
-            ImGui::Text("%d / %d", changedPixels, totalOpaquePixels);
+            {
+				std::lock_guard<std::mutex> lock(info_mutex);
+                ImGui::Text("差分率: %.2f%%", diffPercent);
+                ImGui::Text("%d / %d", changedPixels, totalOpaquePixels);
+            }
             ImGui::PopFont();
             ImGui::End();
         }
@@ -1722,27 +1776,51 @@ int main()
 
         }
 
-        std::unique_lock<std::mutex> lock(imgMutex);
-        if (cv_newFrame.wait_for(lock, std::chrono::milliseconds(1), [&]
-                                 { return newFrameReady; }))
+        cv::Mat localRealtime, localDiff;
+
         {
-            if (!realtimeImg.empty() && realtimeImg.cols == width && realtimeImg.rows == height)
+            std::unique_lock<std::mutex> lock(imgMutex);
+            // 新しいフレームが準備できるまで最大1ms待つ
+            if (cv_newFrame.wait_for(lock, std::chrono::milliseconds(1), [&] { return newFrameReady; }))
             {
-                GLenum format = (realtimeImg.channels() == 3) ? GL_BGR : GL_BGRA;
-                glBindTexture(GL_TEXTURE_2D, realtimeTexID);
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, realtimeImg.cols, realtimeImg.rows, format, GL_UNSIGNED_BYTE, realtimeImg.data);
-                glBindTexture(GL_TEXTURE_2D, 0);
-				realtimeBase64 = MatToBase64(realtimeImg);
+                // 画像をローカルにコピー
+                if (!realtimeImg.empty() && realtimeImg.cols == width && realtimeImg.rows == height)
+                    localRealtime = realtimeImg.clone();
+
+                if (!emptyDiff.empty() && emptyDiff.cols == width && emptyDiff.rows == height)
+                    localDiff = emptyDiff.clone();
+
+                newFrameReady = false;
             }
-            if (!emptyDiff.empty() && emptyDiff.cols == width && emptyDiff.rows == height)
-            {
-                glBindTexture(GL_TEXTURE_2D, diffTexID);
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, emptyDiff.cols, emptyDiff.rows, GL_BGRA, GL_UNSIGNED_BYTE, emptyDiff.data);
-                glBindTexture(GL_TEXTURE_2D, 0);
-				diffBase64 = MatToBase64(emptyDiff);
-            }
-            newFrameReady = false;
+        } // ここで mutex 解放
+
+		std::string localRealtimeBase64, localDiffBase64;
+
+        // mutex を持たずに画像処理
+        if (!localRealtime.empty())
+        {
+            GLenum format = (localRealtime.channels() == 3) ? GL_BGR : GL_BGRA;
+            glBindTexture(GL_TEXTURE_2D, realtimeTexID);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, localRealtime.cols, localRealtime.rows, format, GL_UNSIGNED_BYTE, localRealtime.data);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            localRealtimeBase64 = MatToBase64(localRealtime);
         }
+
+        if (!localDiff.empty())
+        {
+            glBindTexture(GL_TEXTURE_2D, diffTexID);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, localDiff.cols, localDiff.rows, GL_BGRA, GL_UNSIGNED_BYTE, localDiff.data);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            localDiffBase64 = MatToBase64(localDiff);
+        }
+        {
+            std::lock_guard<std::mutex> lock(imgMutex);
+            if (!localRealtimeBase64.empty())
+                realtimeBase64 = localRealtimeBase64;
+            if (!localDiffBase64.empty())
+                diffBase64 = localDiffBase64;
+		}
+
 
         ImGui::Render();
         int display_w, display_h;
