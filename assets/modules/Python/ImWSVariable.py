@@ -23,7 +23,7 @@ def update(data):
     while latest_messages and latest_messages[0]["_timestamp"] < cutoff:
         latest_messages.popleft()
 
-async def get_variable(ws, name: str, timeout: float = 3.0):
+async def get_variable(ws, name: str, timeout: float = 5.0):
     """指定した変数の値を取得。timeout秒以内に取得できなければ例外"""
     start = asyncio.get_event_loop().time()
     await ws.send(json.dumps({
@@ -35,7 +35,7 @@ async def get_variable(ws, name: str, timeout: float = 3.0):
         now = time.time()
         # 最新のメッセージから検索
         for data in reversed(latest_messages):
-            if data.get("type") == "variable_update" and data.get("name") == name:
+            if data.get("type") == "variable_response" and data.get("name") == name:
                 # TTL以内のメッセージなら返す
                 if now - data["_timestamp"] <= MESSAGE_TTL:
                     return data.get("value")

@@ -17,6 +17,7 @@
 #include <thread>
 #include <functional>
 #include <tuple>
+#include <algorithm>
 
 // nlohmann::jsonのエイリアス
 using json = nlohmann::json;
@@ -146,12 +147,13 @@ public:
     // GUI描画の更新とWebSocket通信の処理
     void update();
     void drawWindowManager(bool& visible);
+	void send_variable_update(std::string name);
 
     // 変数をライブラリに登録
     template <typename T>
-    void register_readonly_variable(const std::string& name, T& var, std::mutex& var_mutex);
+    void register_readonly_variable(const std::string& name, T& var, std::recursive_mutex& var_mutex);
 	template <typename T>
-	void register_writable_variable(const std::string& name, T& var, std::mutex& var_mutex);
+	void register_writable_variable(const std::string& name, T& var, std::recursive_mutex& var_mutex);
 
 private:
     // サーバーへの参照
@@ -161,6 +163,8 @@ private:
     std::mutex m_mutex;
 
     std::map<DrawDataKey, WindowState> windows;
+
+    std::vector<websocketpp::connection_hdl> m_active_connections;
 
     // 同期する変数のマップ
     std::map<std::string, VarUpdater> m_readonly_vars;
@@ -181,14 +185,14 @@ private:
 
 // 変数登録関数のテンプレート実装
 template <typename T>
-void ImWS::register_readonly_variable(const std::string& name, T& var, std::mutex& var_mutex)
+void ImWS::register_readonly_variable(const std::string& name, T& var, std::recursive_mutex& var_mutex)
 {
     std::lock_guard<std::mutex> lock(m_mutex); // m_readonly_vars の map 保護
 
     m_readonly_vars[name] = [&var, &var_mutex, name]() {
-        std::lock_guard<std::mutex> lock(var_mutex); // 変数保護
+        std::lock_guard<std::recursive_mutex> lock(var_mutex); // 変数保護
         json j;
-        j["type"] = "variable_update";
+        j["type"] = "variable_response";
         j["name"] = name;
 
         if constexpr (std::is_copy_constructible_v<T>) {
@@ -202,14 +206,14 @@ void ImWS::register_readonly_variable(const std::string& name, T& var, std::mute
 }
 
 template <typename T>
-void ImWS::register_writable_variable(const std::string& name, T& var, std::mutex& var_mutex)
+void ImWS::register_writable_variable(const std::string& name, T& var, std::recursive_mutex& var_mutex)
 {
     std::lock_guard<std::mutex> lock(m_mutex); // m_writable_vars の map 保護
 
     m_writable_vars[name] = [&var, &var_mutex](const json& j) {
         if (j.contains("value")) {
             try {
-                std::lock_guard<std::mutex> lock(var_mutex); // 変数保護
+                std::lock_guard<std::recursive_mutex> lock(var_mutex); // 変数保護
                 var = j.at("value").get<T>();
             }
             catch (const std::exception& e) {
