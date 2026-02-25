@@ -17,7 +17,7 @@
     *   オリジナル、リアルタイム、差分画像の表示/非表示切り替え。
     *   監視対象の座標（タイル座標、ピクセル座標）の指定。
     *   比較元となるオリジナル画像ファイルの選択。
-*   **設定の永続化:** 座標や画像パス、ウィンドウの表示状態などの設定は `app_settings.ini` ファイルに自動で保存され、次回起動時に復元されます。
+*   **設定の永続化:** 座標や画像パス、ウィンドウの表示状態などの設定は `settings.json` ファイルに自動で保存され、次回起動時に復元されます。
 *   **3種類の差分表示方式:** RGB値での絶対値差分の計算の方式、差分ピクセルのみに色を付ける、背景がオリジナル画像の状態で差分ピクセルのみに色を付ける、の3種類の差分表示の方式を選択できます。
 * **画像操作**
   * 拡大縮小、パンが可能（リンク拡大設定で全ウィンドウ同時操作）
@@ -28,7 +28,8 @@
   * moduleList.jsonに記述すると自動起動可能
   * モジュール未使用時はサーバー非起動
   * サーバーIP/ポート、モジュール自動起動のON/OFF設定可能
-  * 標準モジュール（Python）を `assets\modules\Python` に同梱
+  * 標準モジュール（Python）を `assets\modules\Python` に同梱  
+  詳細は[WSModuleSystem.md](WSModuleSystem.md)をご確認ください
 
 ### **標準モジュール**
   * ImWSWindow.pyとImWSVariable.pyによって簡単にウィンドウ作成や変数取得を可能にしています。
@@ -37,44 +38,6 @@
   * bookmark.pyは座標や画像パスを保存してブックマークのように使用できるモジュールです。保存したブックマークはbookmarks.jsonに保存されます。自動起動はtrueになっています。
   * OpenWplace.pyは現在監視している部分をブラウザでそのまま開くためのモジュールです。自動起動はtrueになっています。
   * Pythonで作られているためPythonをインストールしていないと動作しません。
-
-### **読み取り専用変数 (readonly)**
-
-1. `width`:画像の横幅
-2. `height`:画像の縦幅
-3. `originalImage`:オリジナル画像のBase64文字列(pngなどにはされていない生の画像)
-4. `realtimeImage`:リアルタイム画像のBase64文字列(pngなどにはされていない生の画像)
-5. `diffImage`:差分画像のBase64文字列(pngなどにはされていない生の画像)
-6. `tmpTile_x`:入力中の一時的なTileXの座標
-7. `tmpTile_y`:入力中の一時的なTileYの座標
-8. `tmpPixel_x`:入力中の一時的なPixelXの座標
-9. `tmpPixel_y`:入力中の一時的なPixelYの座標
-10. `tmpUpdateSpeed`:入力中の一時的な更新速度
-11. `tmpDiffPattern`:入力中の一時的な差分表示パターン
-12. `tmpMaskColor`:入力中の一時的な差分表示用のマスクカラー
-13. `tmpPath`:入力中の一時的な画像パス
-14. `tile_x`:TileXの座標
-15. `tile_y`:TileYの座標
-16. `pixel_x`:PixelXの座標
-17. `pixel_y`:PixelYの座標
-18. `UpdateSpeed`:更新速度
-19. `diffPattern`:差分表示パターン
-20. `MaskColor`:差分表示用のマスクカラー
-21. `path`:画像パス
-22. `totalPixels`:画像の透明部分を除いたすべてのピクセル数
-23. `wrongPixels`:間違っているピクセル数
-24. `diffPercent`:差分率
-### **書き込み可能変数 (writable)**
-
-1. `tmpTile_x`:入力中の一時的なTileXの座標
-2. `tmpTile_y`:入力中の一時的なTileYの座標
-3. `tmpPixel_x`:入力中の一時的なPixelXの座標
-4. `tmpPixel_y`:入力中の一時的なPixelYの座標
-5. `tmpUpdateSpeed`:入力中の一時的な更新速度
-6. `tmpDiffPattern`:入力中の一時的な差分表示パターン
-7. `tmpMaskColor`:入力中の一時的な差分表示用のマスクカラー
-8. `tmpPath`:入力中の一時的な画像パス
-9. `update`:tmp○○の形の入力中の一時的なものを実際の設定に割り当てるためのbool。trueにすると更新される。更新すると自動でfalseに戻る。
 
 ## ライセンス
 

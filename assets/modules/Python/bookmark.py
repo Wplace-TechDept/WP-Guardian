@@ -1,37 +1,32 @@
 import json
 import asyncio
 import websockets
-from ImWSWindow import *
-from ImWSVariable import *
-from functools import partial
 import os
+from functools import partial
+
+# 自作ライブラリのインポート
+from ImWSWindow import Window, handle_event
+import WSVariable
+from settings_loader import load_module_settings
 
 BOOKMARK_FILE = os.path.join(os.path.dirname(__file__), "bookmarks.json")
 
-class bookmark:
-    def __init__(self, Name:str, TileX:int, TileY:int, PixelX:int, PixelY:int, Path:str):
-        self.Name = Name
-        self.TileX = TileX
-        self.TileY = TileY
-        self.PixelX = PixelX
-        self.PixelY = PixelY
-        self.Path = Path
+class Bookmark:
+    def __init__(self, name, tx, ty, px, py, path):
+        self.name = name
+        self.tx = tx; self.ty = ty
+        self.px = px; self.py = py
+        self.path = path
 
     def to_dict(self):
-        return {
-            "Name": self.Name,
-            "TileX": self.TileX,
-            "TileY": self.TileY,
-            "PixelX": self.PixelX,
-            "PixelY": self.PixelY,
-            "Path": self.Path
-        }
+        return {"Name": self.name, "TileX": self.tx, "TileY": self.ty, 
+                "PixelX": self.px, "PixelY": self.py, "Path": self.path}
 
     @classmethod
     def from_dict(cls, d):
         return cls(d["Name"], d["TileX"], d["TileY"], d["PixelX"], d["PixelY"], d["Path"])
 
-bookmarkList = [bookmark("選択してください",0,0,0,0,"")]
+bookmarkList = [Bookmark("選択してください", 0, 0, 0, 0, "")]
 
 def save_bookmarks():
     with open(BOOKMARK_FILE, "w", encoding="utf-8") as f:
@@ -39,144 +34,131 @@ def save_bookmarks():
 
 def load_bookmarks():
     global bookmarkList
-    path = os.path.join(os.path.dirname(__file__), "bookmarks.json")
-    if os.path.exists(path):
+    if os.path.exists(BOOKMARK_FILE):
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(BOOKMARK_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                bookmarkList = [bookmark.from_dict(d) for d in data]
-        except Exception as e:
-            print("JSON 読み込み失敗:", e)
-            bookmarkList = [bookmark("選択してください",0,0,0,0,"")]
-    else:
-        bookmarkList = [bookmark("選択してください",0,0,0,0,"")]
+                bookmarkList = [Bookmark.from_dict(d) for d in data]
+        except:
+            bookmarkList = [Bookmark("選択してください", 0, 0, 0, 0, "")]
 
+def clear_and_sync(win):
+    ids = [w.id for w in win.widgets] + [w.id for w in win.new_widgets]
+    for wid in ids:
+        win.delete_widget(wid)
 
+def create_main_page(ws, win):
+    clear_and_sync(win)
+    names = [b.name for b in bookmarkList]
+    win.add_text("txt1", "ブックマークを選択して復元・編集・削除ができます")
+    win.add_combo("combo1", "##ブックマークリスト", 0, names)
+    win.add_button("btn1", "ブックマークを復元", event=partial(restore_action, ws, win))
+    win.add_button("btn2", "編集", event=partial(edit_page, ws, win))
+    win.add_button("btn3", "削除", event=partial(delete_page, ws, win))
+    win.add_button("btn4", "現在の状態を新規保存", event=partial(save_page_request, ws, win))
 
-def createMainPage(ws,win:Window):
-    names = list(map(lambda n: n.Name, bookmarkList))
-    win.textWidget("txt1","画像と場所をブックマークとして保存できます")
-    win.comboBoxWidget("combo1",0,names,"##ブックマーク")
-    win.buttonWidget("btn1","ブックマークを復元",partial(restore,ws,win))
-    win.buttonWidget("btn2","ブックマークを編集",partial(editPage,ws,win))
-    win.buttonWidget("btn8","ブックマークを削除",partial(deletePage,ws,win))
-    win.buttonWidget("btn3","現在の状態を保存",partial(savePage,ws,win))
-
-
-def deletePage(ws,win:Window):
-    index = win.getWidget("combo1").value
-    if index != 0:
-        index = win.getWidget("combo1").value
-        deleteAllWidget(win)
-        win.textWidget("txt2",'ブックマーク"'+bookmarkList[index].Name+'"を削除しますか？')
-        win.buttonWidget("btn9","削除する",partial(delete,ws,win,index))
-        win.buttonWidget("btn10","戻る",partial(Return,ws,win))
-
-def delete(ws,win:Window,index):
-    del bookmarkList[index]
-    save_bookmarks()
-    Return(ws,win)
-
-
-def editPage(ws,win:Window):
-    index = win.getWidget("combo1").value
-    if index != 0:
-        index = win.getWidget("combo1").value
-        deleteAllWidget(win)
-        win.inputTextWidget("inputtxt2",bookmarkList[index].Name,"名前")
-        win.inputIntWidget("inputint1","TileX",bookmarkList[index].TileX)
-        win.inputIntWidget("inputint2","TileY",bookmarkList[index].TileY)
-        win.inputIntWidget("inputint3","PixelX",bookmarkList[index].PixelX)
-        win.inputIntWidget("inputint4","PixelY",bookmarkList[index].PixelY)
-        win.inputTextWidget("inputtxt3",bookmarkList[index].Path,"Path")
-        win.buttonWidget("btn6","保存",partial(edit,ws,win,index))
-        win.buttonWidget("btn7","戻る",partial(Return,ws,win))
-
-def edit(ws,win:Window,index):
-    Name = win.getWidget("inputtxt2").value
-    TlX = win.getWidget("inputint1").value
-    TlY = win.getWidget("inputint2").value
-    PxX = win.getWidget("inputint3").value
-    PxY = win.getWidget("inputint4").value
-    Path = win.getWidget("inputtxt3").value
-    bookmarkList[index] = bookmark(Name,TlX,TlY,PxX,PxY,Path)
-    save_bookmarks()
-    Return(ws,win)
-
-def deleteAllWidget(win:Window):
-    for w in win.widgets:
-        id = w.id
-        win.deleteWidget(id)
-
-def Return(ws,win:Window):
-    deleteAllWidget(win)
-    createMainPage(ws,win)
-
-async def restore(ws,win:Window):
-    index = win.getWidget("combo1").value
-    if index != 0:
-        index = win.getWidget("combo1").value
-        TlX = bookmarkList[index].TileX
-        TlY = bookmarkList[index].TileY
-        PxX = bookmarkList[index].PixelX
-        PxY = bookmarkList[index].PixelY
-        Path = bookmarkList[index].Path
-        await set_variable(ws,"tmpTile_x",TlX)
-        await set_variable(ws,"tmpTile_y",TlY)
-        await set_variable(ws,"tmpPixel_x",PxX)
-        await set_variable(ws,"tmpPixel_y",PxY)
-        await set_variable(ws,"tmpPath",Path)
-        await set_variable(ws,"update",True)
+async def restore_action(ws, win):
+    idx = win.get_widget("combo1").value
+    if idx <= 0: return
+    b = bookmarkList[idx]
     
+    # C++側の構造に合わせたキーで送信
+    await WSVariable.set_variable(ws, "settings.temp", {
+        "tile_x": b.tx, "tile_y": b.ty,
+        "pixel_x": b.px, "pixel_y": b.py,
+        "imgPath": b.path
+    })
+    await WSVariable.trigger_update(ws)
 
-def save(ws,win:Window,TlX,TlY,PxX,PxY,Path):
-    Name = win.getWidget("inputtxt1").value
-    bookmarkList.append(bookmark(Name,TlX,TlY,PxX,PxY,Path))
-    print("Saved",Name,TlX,TlY,PxX,PxY,Path)
-    save_bookmarks()
-    Return(ws,win)
+async def save_page_request(ws, win):
+    try:
+        cur = await WSVariable.get_variable(ws, "settings.temp")
+        
+        clear_and_sync(win)
+        win.add_input_text("in_name", "保存名", "")
+        
+        async def do_save():
+            name = win.get_widget("in_name").value
+            new_b = Bookmark(
+                name, 
+                cur.get('tile_x', 0), cur.get('tile_y', 0), 
+                cur.get('pixel_x', 0), cur.get('pixel_y', 0), 
+                cur.get('imgPath', "")
+            )
+            bookmarkList.append(new_b)
+            save_bookmarks()
+            create_main_page(ws, win)
 
-async def savePage(ws,win:Window):
-    TlX = await get_variable(ws,"tile_x")
-    TlY = await get_variable(ws,"tile_y")
-    PxX = await get_variable(ws,"pixel_x")
-    PxY = await get_variable(ws,"pixel_y")
-    Path = await get_variable(ws,"path")
-    deleteAllWidget(win)
-    win.inputTextWidget("inputtxt1","","名前")
-    win.buttonWidget("btn4","保存",partial(save,ws,win,TlX,TlY,PxX,PxY,Path))
-    win.buttonWidget("btn5","戻る",partial(Return,ws,win))
+        win.add_button("btn_do_save", "保存実行", event=do_save)
+        win.add_button("btn_back", "戻る", event=lambda: create_main_page(ws, win))
+    except TimeoutError:
+        print("C++側からのデータ取得に失敗しました")
 
+def edit_page(ws, win):
+    idx = win.get_widget("combo1").value
+    if idx <= 0: return
+    b = bookmarkList[idx]
 
+    clear_and_sync(win)
+    win.add_text("ed_info", f"編集: {b.name}")
+    win.add_input_text("ed_name", "名前", b.name)
+    win.add_input_int("ed_tx", "TileX", b.tx)
+    win.add_input_int("ed_ty", "TileY", b.ty)
+    win.add_input_int("ed_px", "PixelX", b.px) # PixelX 追加
+    win.add_input_int("ed_py", "PixelY", b.py) # PixelY 追加
+    win.add_input_text("ed_path", "Path", b.path)
 
+    async def do_edit():
+        # ウィジェットから値を取得してブックマークを更新
+        b.name = win.get_widget("ed_name").value
+        b.tx = win.get_widget("ed_tx").value
+        b.ty = win.get_widget("ed_ty").value
+        b.px = win.get_widget("ed_px").value
+        b.py = win.get_widget("ed_py").value
+        b.path = win.get_widget("ed_path").value
+        
+        save_bookmarks()
+        create_main_page(ws, win)
 
+    win.add_button("btn_save", "上書き保存", event=do_edit)
+    win.add_button("btn_back", "キャンセル", event=lambda: create_main_page(ws, win))
 
-
+def delete_page(ws, win):
+    idx = win.get_widget("combo1").value
+    if idx <= 0: return
     
+    clear_and_sync(win)
+    win.add_text("warn", f"ブックマーク '{bookmarkList[idx].name}' を削除しますか？")
+    
+    async def do_delete():
+        del bookmarkList[idx]
+        save_bookmarks()
+        create_main_page(ws, win)
 
-async def recv_loop(ws):
-    while True:
-        msg = await ws.recv()
-        data = json.loads(msg)
-        update(data)
-        handle_event(data)
-async def main_loop(ws,win):
-    while True:
-        await win.send_json(ws)
-        await asyncio.sleep(0.1)  # 100msごとにループ
+    win.add_button("btn_del", "はい、削除します", event=do_delete)
+    win.add_button("btn_cancel", "キャンセル", event=lambda: create_main_page(ws, win))
+
 async def main():
-    load_bookmarks()
-    url = "ws://localhost:9002"
-    async with websockets.connect(url,max_size=None) as ws:
-        win = Window("ブックマーク")
-        createMainPage(ws,win)
+    # --- ここで設定を読み込む ---
+    ip, port = load_module_settings()
+    uri = f"ws://{ip}:{port}"
+    print(f"Connecting to {uri}...")
+    async with websockets.connect(uri) as ws:
+        win = Window("ブックマーク管理")
+        create_main_page(ws, win)
 
+        async def send_loop():
+            while True:
+                await win.sync(ws)
+                await asyncio.sleep(0.1)
 
-        await win.send_json(ws)
+        async def recv_loop():
+            async for msg in ws:
+                data = json.loads(msg)
+                WSVariable.update(data)
+                handle_event(data)
 
-        await asyncio.gather(
-            recv_loop(ws),
-            main_loop(ws,win)
-        )
+        await asyncio.gather(send_loop(), recv_loop())
+
 if __name__ == "__main__":
     asyncio.run(main())
