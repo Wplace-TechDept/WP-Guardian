@@ -42,7 +42,7 @@
 using json = nlohmann::json;
 
 // アプリバージョン
-const std::string APP_VERSION = "v3.0.0"; //バージョン更新時にかならず書き換える
+const std::string APP_VERSION = "v3.0.2"; //バージョン更新時にかならず書き換える
 static Settings::WindowStates windowStates{
     true,  // showOriginal
     true,  // showRealtime
