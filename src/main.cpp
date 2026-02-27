@@ -595,7 +595,7 @@ int main()
                 ImGui::MenuItem("設定", nullptr, &windowStates.showSettings);
                 ImGui::MenuItem("情報", nullptr, &windowStates.showInfo);
                 ImGui::MenuItem("ウィンドウ管理", nullptr, &windowStates.showWindowManager);
-                ImGui::MenuItem("モジュール設定", nullptr, &windowStates.showModuleSeting);
+                ImGui::MenuItem("モジュール設定", nullptr, &windowStates.showModuleSetting);
 				ImGui::MenuItem("UI設定", nullptr, &windowStates.showUISettings);
                 ImGui::EndMenu();
             }
@@ -690,7 +690,7 @@ int main()
             ImGui::End();
         }
 
-		auto result = moduleSettingsWindow.Draw(windowStates.showModuleSeting);
+		auto result = moduleSettingsWindow.Draw(windowStates.showModuleSetting);
         if (result.openModuleManager) {
 			mm.SetShow(true);
 		}

@@ -13,8 +13,6 @@ namespace Settings
 					{"showDiff", windowStates.showDiff},
 					{"showSettings", windowStates.showSettings},
 					{"showInfo", windowStates.showInfo},
-					{"showWindowManager", windowStates.showWindowManager},
-					{"showModuleSeting", windowStates.showModuleSeting},
 					{"showUISettings", windowStates.showUISettings }
 				};
 			}
@@ -41,21 +39,6 @@ namespace Settings
 					{"g", appSettings.diffPattern.maskColor.g},
 					{"b", appSettings.diffPattern.maskColor.b},
 					{"a", appSettings.diffPattern.maskColor.a}
-				};
-			}
-			catch (...) {
-				return false;
-			}
-			return true;
-		}
-		bool ToJSON(json& j, const ModuleSettings& moduleSettings) {
-			try {
-				j["ModuleSettings"] =
-				{
-					{"autoStartModules", moduleSettings.autoStartModules},
-					{"useServer", moduleSettings.useServer},
-					{"serverIP", moduleSettings.serverIP},
-					{"serverPort", moduleSettings.serverPort}
 				};
 			}
 			catch (...) {
@@ -103,8 +86,6 @@ namespace Settings
 				assign_if_exists(windowstate, "showDiff", windowStates.showDiff);
 				assign_if_exists(windowstate, "showSettings", windowStates.showSettings);
 				assign_if_exists(windowstate, "showInfo", windowStates.showInfo);
-				assign_if_exists(windowstate, "showWindowManager", windowStates.showWindowManager);
-				assign_if_exists(windowstate, "showModuleSeting", windowStates.showModuleSeting);
 				assign_if_exists(windowstate, "showUISettings", windowStates.showUISettings);
 			}
 			catch (...) {
@@ -144,20 +125,6 @@ namespace Settings
 						assign_if_exists(m, "a", appSettings.diffPattern.maskColor.a);
 					}
 				}
-			}
-			catch (...) {
-				return false;
-			}
-			return true;
-		}
-		bool FromJSON(const json& j, ModuleSettings& moduleSettings)
-		{
-			try {
-				const auto& m = j.at("ModuleSettings");
-				assign_if_exists(m, "autoStartModules", moduleSettings.autoStartModules);
-				assign_if_exists(m, "useServer", moduleSettings.useServer);
-				assign_if_exists(m, "serverIP", moduleSettings.serverIP);
-				assign_if_exists(m, "serverPort", moduleSettings.serverPort);
 			}
 			catch (...) {
 				return false;

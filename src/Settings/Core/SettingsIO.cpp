@@ -9,14 +9,13 @@ using json = nlohmann::json;
 namespace Settings {
     namespace IO {
 
-        bool Save(const WindowStates& windowStates, const AppSettings& appSettings, const ModuleSettings& moduleSettings, const UpdateCache& updateCache, const UISettings& uiSettings) {
+        bool Save(const WindowStates& windowStates, const AppSettings& appSettings, const UpdateCache& updateCache, const UISettings& uiSettings) {
             try {
                 json j;
 
                 // SettingsJSON ‚Ì ToJSON ‚ðŽg‚¤
                 if (!JSON::ToJSON(j, windowStates)) return false;
                 if (!JSON::ToJSON(j, appSettings)) return false;
-                if (!JSON::ToJSON(j, moduleSettings)) return false;
                 if (!JSON::ToJSON(j, updateCache)) return false;
 				if (!JSON::ToJSON(j, uiSettings)) return false;
 
@@ -32,7 +31,7 @@ namespace Settings {
             }
         }
 
-        bool Load(WindowStates& windowStates, AppSettings& appSettings, ModuleSettings& moduleSettings, UpdateCache& updateCache, UISettings& uiSettings) {
+        bool Load(WindowStates& windowStates, AppSettings& appSettings, UpdateCache& updateCache, UISettings& uiSettings) {
             try {
                 std::ifstream ifs(GetExeDir() + "settings.json");
                 if (!ifs.is_open()) return false;
@@ -43,7 +42,6 @@ namespace Settings {
                 // SettingsJSON ‚Ì FromJSON ‚ðŽg‚¤
                 if (!JSON::FromJSON(j, windowStates)) return false;
                 if (!JSON::FromJSON(j, appSettings)) return false;
-                if (!JSON::FromJSON(j, moduleSettings)) return false;
                 if (!JSON::FromJSON(j, updateCache)) return false;
 				if (!JSON::FromJSON(j, uiSettings)) return false;
 

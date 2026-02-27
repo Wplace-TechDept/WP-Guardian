@@ -9,8 +9,6 @@ namespace Settings{
 		bool showDiff = true;
 		bool showSettings = true;
 		bool showInfo = true;
-		bool showWindowManager = true;
-		bool showModuleSeting = true;
 		bool showUISettings = true;
 	};
 
@@ -20,12 +18,6 @@ namespace Settings{
 		float updateSpeed;
 		DiffPattern diffPattern;
 		std::string imgPath;
-	};
-	struct ModuleSettings {
-		bool autoStartModules;
-		bool useServer;
-		std::string serverIP;
-		int serverPort;
 	};
 	struct UpdateCache {
 		bool foundUpdate;
