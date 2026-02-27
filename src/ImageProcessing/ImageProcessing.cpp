@@ -177,7 +177,7 @@ cv::Mat ImageProcessing::fetch_tiles_and_crop(
                 return cv::Mat();
             auto now = std::chrono::system_clock::now();
             auto epoch = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-            std::string url = "https://backend.wplace.live/files/s0/tiles/" + std::to_string(tx) + "/" + std::to_string(ty) + ".png" + "?t=" + std::to_string(epoch);
+            std::string url = "https://backend.wplace.live/tile/" + std::to_string(tx) + "/" + std::to_string(ty) + ".png" + "?t=" + std::to_string(epoch);
             cpr::Response r = ImageProcessing::cancellable_fetch(url, headers);
             if (abort_fetch)
                 return cv::Mat();
