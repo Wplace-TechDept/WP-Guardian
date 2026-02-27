@@ -4,7 +4,7 @@
 namespace ModuleSettings
 {
 	namespace IO {
-		bool Save(const ModuleSettings& moduleSettings);
-		bool Load(ModuleSettings& moduleSettings);
+		bool Save(const Settings& moduleSettings);
+		bool Load(Settings& moduleSettings);
 	}
 }

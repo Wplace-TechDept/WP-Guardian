@@ -15,7 +15,7 @@
 #include <string>
 class ModuleSystem {
 public:
-	ModuleSystem(const ModuleSettings::ModuleSettings& settings, AppState& state);
+	ModuleSystem(const ModuleSettings::Settings& settings, AppState& state);
 	~ModuleSystem();
     void start();   // サーバー起動 + モジュール自動起動
     void stop();    // サーバー停止
@@ -27,11 +27,11 @@ public:
 
     // 再起動フラグ
     bool needsRestart() const;
-    ModuleSettings::ModuleSettings getUpdatedSettings() const;
+    ModuleSettings::Settings getUpdatedSettings() const;
 
 private:
     AppState* state = nullptr;
-    ModuleSettings::ModuleSettings settings;
+    ModuleSettings::Settings settings;
     ModuleSettings::ModuleWindowStates windowStates;
 
     Server server;

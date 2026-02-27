@@ -8,7 +8,7 @@ namespace ModuleSettings
 {
 	namespace JSON
 	{
-		bool ToJSON(json& j, const ModuleSettings& moduleSettings);
-		bool FromJSON(const json& j, ModuleSettings& moduleSettings);
+		bool ToJSON(json& j, const Settings& moduleSettings);
+		bool FromJSON(const json& j, Settings& moduleSettings);
 	}
 }

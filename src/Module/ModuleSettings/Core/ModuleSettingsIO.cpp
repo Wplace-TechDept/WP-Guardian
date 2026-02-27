@@ -9,7 +9,7 @@ using json = nlohmann::json;
 namespace ModuleSettings
 {
 	namespace IO {
-		bool Save(const ModuleSettings& moduleSettings) {
+		bool Save(const Settings& moduleSettings) {
 			try {
 				json j;
 				// ModuleSettingsJSON ‚Ì ToJSON ‚ðŽg‚¤
@@ -23,7 +23,7 @@ namespace ModuleSettings
 				return false;
 			}
 		}
-		bool Load(ModuleSettings& moduleSettings) {
+		bool Load(Settings& moduleSettings) {
 			try {
 				std::ifstream ifs(GetExeDir() + "module_settings.json");
 				if (!ifs.is_open()) return false;

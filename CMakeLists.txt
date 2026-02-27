@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 cmake_policy(SET CMP0148 NEW)
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 
+option(ENABLE_MODULE_SYSTEM "Enable WebSocket module system" ON)
+
 # 外部ライブラリ
 find_package(glfw3 CONFIG REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -16,15 +18,11 @@ find_package(asio CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
 # ディレクトリ指定
-set(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
-set(IMGUI_DIR ${LIB_DIR}/imgui)
+set(LIB_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+set(IMGUI_DIR   ${LIB_DIR}/imgui)
 set(WEBSOCKETPP_DIR ${LIB_DIR}/websocketpp)
-set(JSON_DIR ${LIB_DIR}/json)
-# src を include ルートにする
-set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set(IMWS_DIR ${SRC_DIR}/ImWS)
-set(WSVARIABLE_DIR ${SRC_DIR}/WSVariable)
-set(BASE64_DIR ${SRC_DIR}/Base64)
+set(SRC_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set(MODULE_DIR  ${SRC_DIR}/Module)
 
 # ImGui ソース
 set(IMGUI_SRC
@@ -36,48 +34,14 @@ set(IMGUI_SRC
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
-
-# ImWS ライブラリ
-add_library(ImWS
-    ${IMWS_DIR}/ImWS.cpp
-    ${IMWS_DIR}/ImWS.h
+# ===== Utils =====
+add_library(Utils INTERFACE
+    ${SRC_DIR}/Utils/DiffPattern.h
+    ${SRC_DIR}/Utils/PathUtil.h
 )
+target_include_directories(Utils INTERFACE ${SRC_DIR}/Utils)
 
-add_library(Base64 STATIC
-    ${BASE64_DIR}/Base64.cpp
-    ${BASE64_DIR}/Base64.h
-)
-
-add_library(WSVariable
-    ${WSVARIABLE_DIR}/WSVariable.cpp
-    ${WSVARIABLE_DIR}/WSVariable.h
-)
-
-target_include_directories(WSVariable PUBLIC
-    ${WSVARIABLE_DIR}
-    ${WEBSOCKETPP_DIR}
-    $<TARGET_PROPERTY:asio::asio,INTERFACE_INCLUDE_DIRECTORIES>
-)
-
-target_include_directories(Base64 PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/lib/Base64
-)
-
-
-target_include_directories(ImWS PUBLIC
-    ${IMWS_DIR}
-    ${IMGUI_DIR}
-    ${IMGUI_DIR}/backends
-    ${WEBSOCKETPP_DIR}
-    $<TARGET_PROPERTY:asio::asio,INTERFACE_INCLUDE_DIRECTORIES>
-)
-
-target_compile_definitions(ImWS PUBLIC ASIO_STANDALONE)
-target_link_libraries(ImWS PRIVATE asio::asio)
-
-target_compile_definitions(WSVariable PUBLIC ASIO_STANDALONE)
-target_link_libraries(WSVariable PRIVATE asio::asio)
-
+# ===== ImageViewer =====
 add_library(ImageViewer STATIC
     ${SRC_DIR}/ImageViewer/ImageViewer.cpp
     ${SRC_DIR}/ImageViewer/ImageViewer.h
@@ -90,13 +54,7 @@ target_link_libraries(ImageViewer PRIVATE
     glfw
 )
 
-# ===== Internal Modules =====
-add_library(Utils INTERFACE
-    ${SRC_DIR}/Utils/DiffPattern.h
-    ${SRC_DIR}/Utils/PathUtil.h
-)
-target_include_directories(Utils INTERFACE ${SRC_DIR}/Utils)
-
+# ===== ImageProcessing =====
 add_library(ImageProcessing STATIC
     ${SRC_DIR}/ImageProcessing/ImageProcessing.cpp
     ${SRC_DIR}/ImageProcessing/ImageProcessing.h
@@ -106,39 +64,18 @@ target_link_libraries(ImageProcessing PRIVATE
     cpr::cpr
     Utils
 )
-add_library(ModuleManager STATIC
-    ${SRC_DIR}/ModuleManager/ModuleManager.cpp
-    ${SRC_DIR}/ModuleManager/ModuleManager.h
-)
-target_link_libraries(ModuleManager PRIVATE
-    nlohmann_json::nlohmann_json
-    Utils
-)
-target_include_directories(ModuleManager PRIVATE
-    ${IMGUI_DIR}
-    ${SRC_DIR}/Utils
-)
 
-add_library(Server STATIC
-    ${SRC_DIR}/Server/Server.cpp
-    ${SRC_DIR}/Server/Server.h
-)
-target_include_directories(Server PUBLIC
-    ${WEBSOCKETPP_DIR}
-    $<TARGET_PROPERTY:asio::asio,INTERFACE_INCLUDE_DIRECTORIES>
-)
+# ===== VersionManager =====
 add_library(VersionManager STATIC
     ${SRC_DIR}/VersionManager/VersionManager.cpp
     ${SRC_DIR}/VersionManager/VersionManager.h
 )
-target_compile_definitions(Server PUBLIC ASIO_STANDALONE)
-target_link_libraries(Server PRIVATE asio::asio)
-
 target_link_libraries(VersionManager PRIVATE
     cpr::cpr
     nlohmann_json::nlohmann_json
 )
 
+# ===== Settings =====
 set(SETTINGS_CORE_DIR ${SRC_DIR}/Settings/Core)
 set(SETTINGS_UI_DIR   ${SRC_DIR}/Settings/UI)
 
@@ -157,11 +94,10 @@ target_link_libraries(SettingsCore PRIVATE
     Utils
     nlohmann_json::nlohmann_json
 )
+
 add_library(SettingsUI STATIC
     ${SETTINGS_UI_DIR}/AppSettingsWindow.cpp
     ${SETTINGS_UI_DIR}/AppSettingsWindow.h
-    ${SETTINGS_UI_DIR}/ModuleSettingsWindow.cpp
-    ${SETTINGS_UI_DIR}/ModuleSettingsWindow.h
     ${SETTINGS_UI_DIR}/UISettingsWindow.cpp
     ${SETTINGS_UI_DIR}/UISettingsWindow.h
 )
@@ -173,30 +109,152 @@ target_link_libraries(SettingsUI PRIVATE
     SettingsCore
     glfw
 )
-add_library(Base64Codec STATIC
-    ${SRC_DIR}/Base64Codec/Base64Codec.cpp
-    ${SRC_DIR}/Base64Codec/Base64Codec.h
+
+# ===== Module =====
+set(MODULE_SETTINGS_CORE_DIR ${MODULE_DIR}/ModuleSettings/Core)
+set(MODULE_SETTINGS_UI_DIR   ${MODULE_DIR}/ModuleSettings/UI)
+
+add_library(ModuleSettingsCore STATIC
+    ${MODULE_SETTINGS_CORE_DIR}/ModuleSettings.h
+    ${MODULE_SETTINGS_CORE_DIR}/ModuleSettingsIO.cpp
+    ${MODULE_SETTINGS_CORE_DIR}/ModuleSettingsIO.h
+    ${MODULE_SETTINGS_CORE_DIR}/ModuleSettingsJSON.cpp
+    ${MODULE_SETTINGS_CORE_DIR}/ModuleSettingsJSON.h
+)
+target_include_directories(ModuleSettingsCore PUBLIC
+    ${MODULE_SETTINGS_CORE_DIR}
+    ${SRC_DIR}
+)
+target_link_libraries(ModuleSettingsCore PRIVATE
+    nlohmann_json::nlohmann_json
+    Utils
 )
 
-target_include_directories(Base64Codec PRIVATE
-    ${SRC_DIR}/Base64
-    ${LIB_DIR}/base64-SIMD-C/include
-)
+if(ENABLE_MODULE_SYSTEM)
 
-target_link_libraries(Base64Codec PRIVATE
-    Base64
-    ${LIB_DIR}/base64-SIMD-C/lib/base64-SIMD-C.lib
-)
+    add_library(Base64 STATIC
+        ${MODULE_DIR}/base64/base64.cpp
+        ${MODULE_DIR}/base64/base64.h
+    )
+    target_include_directories(Base64 PUBLIC
+        ${MODULE_DIR}/base64
+    )
 
-target_compile_definitions(Base64Codec PRIVATE USE_DLL)
+    add_library(Base64Codec STATIC
+        ${MODULE_DIR}/Base64Codec/Base64Codec.cpp
+        ${MODULE_DIR}/Base64Codec/Base64Codec.h
+    )
+    target_include_directories(Base64Codec PRIVATE
+        ${MODULE_DIR}/base64
+        ${LIB_DIR}/base64-SIMD-C/include
+    )
+    target_link_libraries(Base64Codec PRIVATE
+        Base64
+        ${LIB_DIR}/base64-SIMD-C/lib/base64-SIMD-C.lib
+    )
+    target_compile_definitions(Base64Codec PRIVATE USE_DLL)
 
-# 実行ファイル
+    add_library(ImWS STATIC
+        ${MODULE_DIR}/ImWS/ImWS.cpp
+        ${MODULE_DIR}/ImWS/ImWS.h
+    )
+    target_include_directories(ImWS PUBLIC
+        ${MODULE_DIR}/ImWS
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
+        ${WEBSOCKETPP_DIR}
+        $<TARGET_PROPERTY:asio::asio,INTERFACE_INCLUDE_DIRECTORIES>
+    )
+    target_compile_definitions(ImWS PUBLIC ASIO_STANDALONE)
+    target_link_libraries(ImWS PRIVATE asio::asio)
+
+    add_library(WSVariable STATIC
+        ${MODULE_DIR}/WSVariable/WSVariable.cpp
+        ${MODULE_DIR}/WSVariable/WSVariable.h
+    )
+    target_include_directories(WSVariable PUBLIC
+        ${MODULE_DIR}/WSVariable
+        ${WEBSOCKETPP_DIR}
+        $<TARGET_PROPERTY:asio::asio,INTERFACE_INCLUDE_DIRECTORIES>
+    )
+    target_compile_definitions(WSVariable PUBLIC ASIO_STANDALONE)
+    target_link_libraries(WSVariable PRIVATE asio::asio)
+
+    add_library(Server STATIC
+        ${MODULE_DIR}/Server/Server.cpp
+        ${MODULE_DIR}/Server/Server.h
+    )
+    target_include_directories(Server PUBLIC
+        ${MODULE_DIR}/Server
+        ${WEBSOCKETPP_DIR}
+        $<TARGET_PROPERTY:asio::asio,INTERFACE_INCLUDE_DIRECTORIES>
+    )
+    target_compile_definitions(Server PUBLIC ASIO_STANDALONE)
+    target_link_libraries(Server PRIVATE asio::asio)
+
+    add_library(ModuleManager STATIC
+        ${MODULE_DIR}/ModuleManager/ModuleManager.cpp
+        ${MODULE_DIR}/ModuleManager/ModuleManager.h
+    )
+    target_include_directories(ModuleManager PRIVATE
+        ${IMGUI_DIR}
+        ${SRC_DIR}/Utils
+    )
+    target_link_libraries(ModuleManager PRIVATE
+        nlohmann_json::nlohmann_json
+        Utils
+    )
+
+    add_library(ModuleSettingsUI STATIC
+        ${MODULE_SETTINGS_UI_DIR}/ModuleSettingsWindow.cpp
+        ${MODULE_SETTINGS_UI_DIR}/ModuleSettingsWindow.h
+    )
+    target_include_directories(ModuleSettingsUI PUBLIC
+        ${MODULE_SETTINGS_UI_DIR}
+        ${IMGUI_DIR}
+    )
+    target_link_libraries(ModuleSettingsUI PRIVATE
+        ModuleSettingsCore
+    )
+
+    add_library(ModuleSystemLib STATIC
+        ${MODULE_DIR}/ModuleSystem.cpp
+        ${MODULE_DIR}/ModuleSystem.h
+    )
+    target_include_directories(ModuleSystemLib PUBLIC
+        ${MODULE_DIR}
+        ${SRC_DIR}
+        ${IMGUI_DIR}
+        ${WEBSOCKETPP_DIR}
+        ${OpenCV_INCLUDE_DIRS}
+        $<TARGET_PROPERTY:asio::asio,INTERFACE_INCLUDE_DIRECTORIES>
+    )
+    target_compile_definitions(ModuleSystemLib PUBLIC
+        ASIO_STANDALONE
+        ENABLE_MODULE_SYSTEM
+    )
+    target_link_libraries(ModuleSystemLib PRIVATE
+        asio::asio
+        nlohmann_json::nlohmann_json
+        ImWS
+        WSVariable
+        Server
+        ModuleManager
+        Base64Codec
+        ModuleSettingsCore
+        ModuleSettingsUI
+        SettingsCore
+        ${OpenCV_LIBS}
+    )
+
+endif()
+
+# ===== 実行ファイル =====
 add_executable(WP_Guardian
     ${SRC_DIR}/main.cpp
     ${IMGUI_SRC}
     app.rc
 )
-
 
 if(MSVC)
     target_link_options(WP_Guardian PRIVATE "/SUBSYSTEM:WINDOWS" "/ENTRY:mainCRTStartup")
@@ -216,31 +274,33 @@ target_link_libraries(WP_Guardian PRIVATE
     ${OpenCV_LIBS}
     GLEW::GLEW
     cpr::cpr
-    # internal modules
     ImageProcessing
-    ModuleManager
-    Server
     VersionManager
-    ImWS
-    Base64Codec
-    WSVariable
     ImageViewer
     SettingsCore
     SettingsUI
+    ModuleSettingsCore
     Utils
+    $<$<BOOL:${ENABLE_MODULE_SYSTEM}>:ModuleSystemLib>
 )
 
-# ビルド後に assets フォルダをコピー
+# ===== ビルド後処理 =====
 add_custom_command(TARGET WP_Guardian POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:WP_Guardian>/assets"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/assets"
         "$<TARGET_FILE_DIR:WP_Guardian>/assets"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${LIB_DIR}/base64-SIMD-C/bin/base64-SIMD-C.dll"
-        "$<TARGET_FILE_DIR:WP_Guardian>/"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/imgui.ini"
         "$<TARGET_FILE_DIR:WP_Guardian>/"
     VERBATIM
 )
+
+if(ENABLE_MODULE_SYSTEM)
+    add_custom_command(TARGET WP_Guardian POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${LIB_DIR}/base64-SIMD-C/bin/base64-SIMD-C.dll"
+            "$<TARGET_FILE_DIR:WP_Guardian>/"
+        VERBATIM
+    )
+endif()
