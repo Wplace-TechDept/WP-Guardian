@@ -2,7 +2,7 @@
 #include <string>
 
 namespace ModuleSettings {
-    struct ModuleSettings {
+    struct Settings {
         bool autoStartModules;
         bool useServer;
         std::string serverIP;

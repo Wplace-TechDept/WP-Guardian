@@ -594,8 +594,6 @@ int main()
                 ImGui::MenuItem("差分画像", nullptr, &windowStates.showDiff);
                 ImGui::MenuItem("設定", nullptr, &windowStates.showSettings);
                 ImGui::MenuItem("情報", nullptr, &windowStates.showInfo);
-                ImGui::MenuItem("ウィンドウ管理", nullptr, &windowStates.showWindowManager);
-                ImGui::MenuItem("モジュール設定", nullptr, &windowStates.showModuleSetting);
 				ImGui::MenuItem("UI設定", nullptr, &windowStates.showUISettings);
                 ImGui::EndMenu();
             }
