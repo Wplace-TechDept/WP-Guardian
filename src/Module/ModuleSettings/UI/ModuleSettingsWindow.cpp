@@ -1,7 +1,7 @@
 #include "ModuleSettingsWindow.h"
 
-namespace MpduleSettings {
-    ModuleSettingsWindow::ModuleSettingsWindow(ModuleSettings settings)
+namespace ModuleSettings {
+    ModuleSettingsWindow::ModuleSettingsWindow(Settings settings)
         : tempSettings(settings) {
     }
 

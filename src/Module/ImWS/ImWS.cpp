@@ -364,7 +364,7 @@ void ImWS::handle_delete_widget(websocketpp::connection_hdl hdl, const json& pay
     }
 }
 
-void ImWS::on_message(websocketpp::connection_hdl hdl, server::message_ptr msg) {
+void ImWS::on_message(websocketpp::connection_hdl hdl, WSServer::message_ptr msg) {
     json j;
     try {
         j = json::parse(msg->get_payload());

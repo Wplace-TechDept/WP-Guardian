@@ -106,7 +106,7 @@ void WSVariable::update()
     }
 }
 
-void WSVariable::on_message(websocketpp::connection_hdl hdl, server::message_ptr msg)
+void WSVariable::on_message(websocketpp::connection_hdl hdl, WSServer::message_ptr msg)
 {
     json j;
     try {

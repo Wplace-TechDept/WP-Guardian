@@ -18,7 +18,7 @@
 using json = nlohmann::json;
 
 // WebSocketサーバーの型
-using server = websocketpp::server<websocketpp::config::asio>;
+using WSServer = websocketpp::server<websocketpp::config::asio>;
 
 // クライアントごとの描画データを一意に識別するためのキー
 struct DrawDataKey
@@ -147,7 +147,7 @@ public:
     // GUI描画の更新
     void update();
 
-    void on_message(websocketpp::connection_hdl hdl, server::message_ptr msg);
+    void on_message(websocketpp::connection_hdl hdl, WSServer::message_ptr msg);
     void on_open(websocketpp::connection_hdl hdl);
     void on_close(websocketpp::connection_hdl hdl);
     std::function<void(websocketpp::connection_hdl, const std::string&)> send;

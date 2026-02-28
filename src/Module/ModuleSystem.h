@@ -6,13 +6,11 @@
 #include "ImWS/ImWS.h"
 #include "WSVariable/WSVariable.h"
 #include "ModuleManager/ModuleManager.h"
-#include "Base64Codec/Base64Codec.h"
 #include "Settings/Core/Settings.h"
 #include "Settings/Core/SettingsJSON.h"
-#include <opencv2/opencv.hpp>
-#include <nlohmann/json.hpp>
-#include <functional>
+#include "Base64Codec/Base64Codec.h"
 #include <string>
+
 class ModuleSystem {
 public:
 	ModuleSystem(const ModuleSettings::Settings& settings, AppState& state);
@@ -37,7 +35,7 @@ private:
     Server server;
     ImWS imws;
     WSVariable wsVar;
-    ModuleManager mm;
+    ModuleManager mm{ "assets/moduleList.json" };
     ModuleSettings::ModuleSettingsWindow moduleSettingsWindow;
 
     bool restartRequested = false;

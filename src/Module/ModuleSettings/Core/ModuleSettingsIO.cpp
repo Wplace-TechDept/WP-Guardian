@@ -37,4 +37,5 @@ namespace ModuleSettings
 				return false;
 			}
 		}
+	}
 }

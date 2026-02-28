@@ -14,7 +14,7 @@
 
 
 using json = nlohmann::json;
-using server = websocketpp::server<websocketpp::config::asio>;
+using WSServer = websocketpp::server<websocketpp::config::asio>;
 
 class WSVariable {
 public:
@@ -29,7 +29,7 @@ public:
 
     void notify_change(const std::string& name);
     // WebSocketのメッセージハンドラ
-    void on_message(websocketpp::connection_hdl hdl, server::message_ptr msg);
+    void on_message(websocketpp::connection_hdl hdl, WSServer::message_ptr msg);
 
     // WebSocketの接続・切断ハンドラ
     void on_open(websocketpp::connection_hdl hdl);

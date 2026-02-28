@@ -1,10 +1,11 @@
-#include "ModuleSystem.h"
+ï»¿#include "ModuleSystem.h"
 #include "imgui.h"
 #include <iostream>
 #include <nlohmann/json.hpp>
 
-ModuleSystem::ModuleSystem(const ModuleSettings& settings, AppState& state)
-	: settings(settings), state(&state), moduleSettingsWindow(settings)
+using json = nlohmann::json;
+ModuleSystem::ModuleSystem(const ModuleSettings::Settings& settings, AppState& state)
+	: settings(settings), state(&state), mm("assets/moduleList.json"), moduleSettingsWindow(settings)
 {
 	bindWebSocket();
 	registerVariables();
@@ -23,7 +24,7 @@ void ModuleSystem::bindWebSocket()
 		imws.on_close(hdl);
 		wsVar.on_close(hdl);
 	});
-	server.add_message_handler([this](websocketpp::connection_hdl hdl, Server::message_ptr msg) {
+	server.add_message_handler([this](websocketpp::connection_hdl hdl, WSServer::message_ptr msg) {
 		imws.on_message(hdl, msg);
 		wsVar.on_message(hdl, msg);
 	});
@@ -107,12 +108,12 @@ void ModuleSystem::registerVariables()
 
 std::string ModuleSystem::MatToBase64(const cv::Mat& mat)
 {
-	// Œ³‚Í BGRA
+	// å…ƒã¯ BGRA
 	CV_Assert(mat.type() == CV_8UC4);
 	CV_Assert(mat.isContinuous());
 
 	cv::Mat rgbaMat;
-	cv::cvtColor(mat, rgbaMat, cv::COLOR_BGRA2RGBA); // B G R A ¨ R G B A
+	cv::cvtColor(mat, rgbaMat, cv::COLOR_BGRA2RGBA); // B G R A â†’ R G B A
 
 	const uint8_t* data = rgbaMat.data;
 	size_t dataSize = rgbaMat.total() * rgbaMat.elemSize();
@@ -128,12 +129,12 @@ bool ModuleSystem::can_bind(const std::string& ip, unsigned short port)
 		asio::ip::tcp::acceptor acceptor(ctx);
 		asio::ip::tcp::endpoint ep(asio::ip::make_address(ip), port);
 		acceptor.open(ep.protocol());
-		acceptor.bind(ep);  // ‚±‚±‚Åƒ|[ƒgg—p’†‚È‚ç—áŠO
+		acceptor.bind(ep);  // ã“ã“ã§ãƒãƒ¼ãƒˆä½¿ç”¨ä¸­ãªã‚‰ä¾‹å¤–
 		acceptor.close();
-		return true; // ƒoƒCƒ“ƒh‰Â”\
+		return true; // ãƒã‚¤ãƒ³ãƒ‰å¯èƒ½
 	}
 	catch (const std::exception&) {
-		return false; // Šù‚Ég—p’†‚È‚Ç‚ÅƒoƒCƒ“ƒh•s‰Â
+		return false; // æ—¢ã«ä½¿ç”¨ä¸­ãªã©ã§ãƒã‚¤ãƒ³ãƒ‰ä¸å¯
 	}
 }
 
@@ -144,7 +145,7 @@ void ModuleSystem::start()
 			server.start(settings.serverIP, settings.serverPort);
 		}
 		else {
-			std::cerr << "ƒ|[ƒg‚ª‚·‚Å‚Ég—p‚³‚ê‚Ä‚¢‚Ü‚·: " << settings.serverPort << "BƒT[ƒo[‚ğ‹N“®‚µ‚Ü‚¹‚ñB" << std::endl;
+			std::cerr << "ãƒãƒ¼ãƒˆãŒã™ã§ã«ä½¿ç”¨ã•ã‚Œã¦ã„ã¾ã™: " << settings.serverPort << "ã€‚ã‚µãƒ¼ãƒãƒ¼ã‚’èµ·å‹•ã—ã¾ã›ã‚“ã€‚" << std::endl;
 			settings.useServer = false;
 			settings.autoStartModules = false;
 		}
@@ -176,12 +177,12 @@ void ModuleSystem::drawUI()
 }
 void ModuleSystem::drawMenuItems()
 {
-	ImGui::MenuItem("ƒEƒBƒ“ƒhƒEŠÇ—", nullptr, &windowStates.showWindowManager);
-	ImGui::MenuItem("ƒ‚ƒWƒ…[ƒ‹İ’è", nullptr, &windowStates.showModuleSetting);
+	ImGui::MenuItem("ã‚¦ã‚£ãƒ³ãƒ‰ã‚¦ç®¡ç†", nullptr, &windowStates.showWindowManager);
+	ImGui::MenuItem("ãƒ¢ã‚¸ãƒ¥ãƒ¼ãƒ«è¨­å®š", nullptr, &windowStates.showModuleSettings);
 }
 bool ModuleSystem::needsRestart() const {
 	return restartRequested;
 }
-ModuleSettings ModuleSystem::getUpdatedSettings() const {
+ModuleSettings::Settings ModuleSystem::getUpdatedSettings() const {
 	return moduleSettingsWindow.GetTempSettings();
 }

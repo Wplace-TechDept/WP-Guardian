@@ -1,5 +1,5 @@
 #pragma once 
-#include "Settings.h"
+#include "ModuleSettings.h"
 #include "imgui.h"
 
 struct ModuleSettingsWindowResult {
@@ -9,12 +9,12 @@ struct ModuleSettingsWindowResult {
 namespace ModuleSettings {
     class ModuleSettingsWindow {
     public:
-        ModuleSettingsWindow(ModuleSettings settings);
+        ModuleSettingsWindow(Settings settings);
         ~ModuleSettingsWindow();
         ModuleSettingsWindowResult Draw(bool& isShow);
-        const ModuleSettings& GetTempSettings() const { return tempSettings; }
+        const Settings& GetTempSettings() const { return tempSettings; }
         Settings& GetTempSettings() { return tempSettings; }
     private:
-        ModuleSettings tempSettings{};
+        Settings tempSettings{};
     };
 }
