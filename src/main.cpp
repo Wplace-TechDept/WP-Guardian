@@ -21,20 +21,14 @@
 #include <vector>
 #include <cstring>
 // --- 自作ヘッダ ---
-#include "ImWS.h"
-#include "WSVariable.h"
-#include "Base64Codec/Base64Codec.h"
 #include "VersionManager/VersionManager.h"
-#include "ModuleManager/ModuleManager.h"
 #include "Utils/DiffPattern.h"
 #include "ImageProcessing/ImageProcessing.h"
-#include "Server/Server.h"
 #include "ImageViewer/ImageViewer.h"
 #include "Settings/Core/Settings.h"
 #include "Settings/Core/SettingsIO.h"
 #include "Settings/Core/SettingsJSON.h"
 #include "Settings/UI/AppSettingsWindow.h"
-#include "Settings/UI/ModuleSettingsWindow.h"
 #include "Settings/UI/UISettingsWindow.h"
 #include "PathUtil.h"
 
@@ -49,8 +43,6 @@ static Settings::WindowStates windowStates{
     true,  // showDiff
     true,  // showSettings
     true,  // showInfo
-    false, // showWindowManager
-	false, // showModuleSeting
 	false   // showUISettings
 };
 static Settings::AppSettings appSettings{
@@ -61,12 +53,6 @@ static Settings::AppSettings appSettings{
     4.0f,               // updateSpeed
     DiffPattern{ DiffPatternType::ColorMask, ColorRGBA(0, 1.0f, 0, 1.0f) }, // diffPattern
 	GetExeDir()+"assets\\template.png" // imgPath
-};
-static Settings::ModuleSettings moduleSettings{
-    false,              // autoStartModules
-    false,               // useServer
-	"127.0.0.1",        // serverIP
-	9002                // serverPort
 };
 static Settings::UpdateCache updateCache{
     false,              // foundUpdate
@@ -154,41 +140,6 @@ void SetupConsoleIfDebug()
 
     std::cout << u8"[デバッグ] コンソールを開きました！" << std::endl;
 #endif
-}
-
-ModuleManager mm("assets/moduleList.json");
-
-std::string MatToBase64(const cv::Mat& mat)
-{
-    // 元は BGRA
-    CV_Assert(mat.type() == CV_8UC4);
-    CV_Assert(mat.isContinuous());
-
-    cv::Mat rgbaMat;
-    cv::cvtColor(mat, rgbaMat, cv::COLOR_BGRA2RGBA); // B G R A → R G B A
-
-    const uint8_t* data = rgbaMat.data;
-    size_t dataSize = rgbaMat.total() * rgbaMat.elemSize();
-
-    static Base64Codec codec;
-    return codec.encode(data, dataSize);
-}
-
-
-bool can_bind(const std::string& ip, unsigned short port)
-{
-    try {
-        asio::io_context ctx;
-        asio::ip::tcp::acceptor acceptor(ctx);
-        asio::ip::tcp::endpoint ep(asio::ip::make_address(ip), port);
-        acceptor.open(ep.protocol());
-        acceptor.bind(ep);  // ここでポート使用中なら例外
-        acceptor.close();
-        return true; // バインド可能
-    }
-    catch (const std::exception&) {
-        return false; // 既に使用中などでバインド不可
-    }
 }
 
 void setWindowIconFromExe(GLFWwindow* window)
@@ -346,11 +297,6 @@ static bool SafeUploadTexture(GLuint texID, int w, int h, const cv::Mat& mat)
     return true;
 }
 
-struct Base64ImageCache {
-    std::string data = "";  // Base64文字列
-    bool hasData = false;   // キャッシュが有効か
-};
-
 int main()
 {
 	SetupConsoleIfDebug();// デバッグ時にコンソールを開く
@@ -403,59 +349,8 @@ int main()
 
 
     // アプリ起動時に設定を読み込む
-    Settings::IO::Load(windowStates, appSettings, moduleSettings, updateCache, uiSettings);
+    Settings::IO::Load(windowStates, appSettings, updateCache, uiSettings);
 
-	// WebSocketサーバー起動処理
-	Server server;
-    auto bind_ws = [&](auto& ws) {
-        server.add_open_handler(
-            [&](websocketpp::connection_hdl hdl) { ws.on_open(hdl); }
-        );
-        server.add_close_handler(
-            [&](websocketpp::connection_hdl hdl) { ws.on_close(hdl); }
-        );
-        server.add_message_handler(
-            [&](websocketpp::connection_hdl hdl, server::message_ptr msg) {
-                ws.on_message(hdl, msg);
-            }
-        );
-    };
-
-    ImWS imws;
-    imws.send = [&](auto hdl, const std::string& msg) {
-        server.send(hdl, msg);
-        };
-
-    WSVariable wsVar;
-    wsVar.send = [&](auto hdl, const std::string& msg) {
-        server.send(hdl, msg);
-        };
-
-    bind_ws(imws);
-    bind_ws(wsVar);
-
-    // useServerがtrueの場合にのみ、ポートの空き状況をチェック
-    if (moduleSettings.useServer) {
-        // 1. ポートが使用可能かメインスレッドで先に確認する
-        bool isPortAvailable = can_bind(moduleSettings.serverIP, moduleSettings.serverPort);
-
-        if (isPortAvailable) {
-            // ポートが空いているので、サーバーを別スレッドで起動
-			server.start(moduleSettings.serverIP, moduleSettings.serverPort);
-        }
-        else {
-            // 2. ポートが使用中のため、サーバーは起動せず、フラグを更新
-            std::cerr << "ポートがすでに使用されています: " << moduleSettings.serverPort << "。サーバーを起動しません。" << std::endl;
-            // サーバーが起動しないため、関連するモジュールの自動起動も無効化する
-            moduleSettings.useServer = false;
-            moduleSettings.autoStartModules = false;
-        }
-    }
-
-    // 3. 最終的に確定した autoStartModules の値に基づいてモジュールを起動
-    if (moduleSettings.autoStartModules) {
-        mm.LaunchModules();
-    }
     cv::Mat originalImg = cv::imread(appSettings.imgPath, cv::IMREAD_UNCHANGED);
     if (originalImg.empty())
     {
@@ -472,10 +367,6 @@ int main()
     GLuint realtimeTexID = createEmptyTexture(width, height);
     GLuint diffTexID = createEmptyTexture(width, height);
 
-    Base64ImageCache originalBase64;
-    Base64ImageCache realtimeBase64;
-    Base64ImageCache diffBase64;
-
 	ImageProcessing imgProc;
 	imgProc.SetTileParams(appSettings.tile_x, appSettings.tile_y, appSettings.pixel_x, appSettings.pixel_y);
 	imgProc.SetDiffPattern(appSettings.diffPattern);
@@ -487,7 +378,6 @@ int main()
 	double diffPercent = 0;
 
 	Settings::AppSettingsWindow settingsWindow(appSettings,window,bigFont);
-	Settings::ModuleSettingsWindow moduleSettingsWindow(moduleSettings);
 	Settings::UISettingsWindow uiSettingsWindow;
 
     bool update = false;
@@ -497,78 +387,6 @@ int main()
 	ImageViewer DiffViewer(width, height);
 
     imgProc.start();
-
-    wsVar.register_setter("update", [&](const json& value) {
-        update = value.get<bool>();
-    });
-    wsVar.register_getter("settings.temp", [&]() -> json {
-        json j;
-        Settings::JSON::ToJSON(j, settingsWindow.GetTempSettings());
-        return j["AppSettings"];
-    });
-    wsVar.register_setter("settings.temp",[&](const json& value){
-        auto& temp = settingsWindow.GetTempSettings();
-
-        json wrapper;
-        wrapper["AppSettings"] = value;
-
-        Settings::JSON::FromJSON(wrapper, temp);
-    });
-
-    wsVar.register_getter("settings", [&]() -> json {
-        json j;
-        Settings::JSON::ToJSON(j, appSettings);
-        return j["AppSettings"];
-    });
-
-    wsVar.register_getter("info", [&]() -> json {
-        json j;
-        j["totalPixels"] = totalPixels;
-        j["diffPixels"] = diffPixels;
-        j["diffPercent"] = diffPercent;
-        return j;
-    });
-
-    wsVar.register_getter("image.size", [&]() -> json {
-        return{
-            {"width", width},
-            {"height", height}
-        };
-    });
-
-    wsVar.register_getter("image.original", [&]() -> json {
-        if (!originalBase64.hasData) {
-            originalBase64.data = MatToBase64(originalImg);
-            originalBase64.hasData = true;
-        }
-        return{
-            {"width", originalImg.cols},
-            {"height", originalImg.rows},
-            {"data", originalBase64.data}
-        };
-    });
-    wsVar.register_getter("image.realtime", [&]() -> json {
-        if (!realtimeBase64.hasData) {
-            realtimeBase64.data = MatToBase64(realtimeImg);
-            realtimeBase64.hasData = true;
-        }
-        return{
-            {"width", realtimeImg.cols},
-            {"height", realtimeImg.rows},
-            {"data", realtimeBase64.data}
-        };
-    });
-    wsVar.register_getter("image.diff", [&]() -> json {
-        if (!diffBase64.hasData) {
-            diffBase64.data = MatToBase64(diffImg);
-            diffBase64.hasData = true;
-        }
-        return{
-            {"width", diffImg.cols},
-            {"height", diffImg.rows},
-            {"data", diffBase64.data}
-        };
-    });
 
     glfwSetWindowCloseCallback(window, [](GLFWwindow* win)
         {
@@ -608,10 +426,6 @@ int main()
             ImGui::EndMainMenuBar();
         }
 
-        imws.update();
-        imws.drawWindowManager(windowStates.showWindowManager);
-        wsVar.update();
-        mm.ShowWindow();
         showVersionWindow();
 		uiSettingsWindow.Draw(windowStates.showUISettings, uiSettings);
 
@@ -844,7 +658,7 @@ int main()
     glDeleteTextures(1, &realtimeTexID);
     glDeleteTextures(1, &diffTexID);
 
-    Settings::IO::Save(windowStates, appSettings, moduleSettings, updateCache, uiSettings);
+    Settings::IO::Save(windowStates, appSettings, updateCache, uiSettings);
 
 
     ImGui::SaveIniSettingsToDisk(imguiIniPath.c_str());
@@ -853,8 +667,6 @@ int main()
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
-
-    server.stop();
 
     return 0;
 }

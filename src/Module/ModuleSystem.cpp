@@ -2,13 +2,17 @@
 #include "imgui.h"
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include "ModuleSettingsJSON.h"
+#include "ModuleSettingsIO.h"
+#include "SettingsJSON.h"
 
 using json = nlohmann::json;
-ModuleSystem::ModuleSystem(const ModuleSettings::Settings& settings, AppState& state)
-	: settings(settings), state(&state), mm("assets/moduleList.json"), moduleSettingsWindow(settings)
+ModuleSystem::ModuleSystem(AppState& state)
+	: state(state), mm("assets/moduleList.json"), moduleSettingsWindow(ModuleSettings::Settings{})
 {
 	bindWebSocket();
 	registerVariables();
+	// settingsはstart()→loadSettings()で上書きされる
 }
 ModuleSystem::~ModuleSystem()
 {
@@ -38,11 +42,11 @@ void ModuleSystem::bindWebSocket()
 void ModuleSystem::registerVariables()
 {
 	wsVar.register_setter("update", [&](const json& value) {
-		state->update = value.get<bool>();
+		state.update = value.get<bool>();
 	});
 	wsVar.register_getter("settings.temp", [&]() -> json {
 		json j;
-		Settings::JSON::ToJSON(j, state->getTempSettings());
+		Settings::JSON::ToJSON(j, state.getTempSettings());
 		return j["AppSettings"];
 	});
 	wsVar.register_setter("settings.temp", [&](const json& value) {
@@ -50,58 +54,58 @@ void ModuleSystem::registerVariables()
 		json wrapper;
 		wrapper["AppSettings"] = value;
 		Settings::JSON::FromJSON(wrapper, temp);
-		state->setTempSettings(temp);
+		state.setTempSettings(temp);
 	});
 	wsVar.register_getter("settings", [&]() -> json {
 		json j;
-		Settings::JSON::ToJSON(j, *state->appSettings);
+		Settings::JSON::ToJSON(j, *state.appSettings);
 		return j["AppSettings"];
 	});
 
 	wsVar.register_getter("info", [&]() -> json {
 		json j;
-		j["totalPixels"] = state->totalPixels;
-		j["diffPixels"] = state->diffPixels;
-		j["diffPercent"] = state->diffPercent;
+		j["totalPixels"] = state.totalPixels;
+		j["diffPixels"] = state.diffPixels;
+		j["diffPercent"] = state.diffPercent;
 		return j;
 	});
 	wsVar.register_getter("image.size", [&]() -> json {
 		return{
-			{"width", state->width},
-			{"height", state->height}
+			{"width", state.width},
+			{"height", state.height}
 		};
 	});
 	wsVar.register_getter("image.original", [&]() -> json {
-		if (!state->originalBase64.hasData) {
-			state->originalBase64.data = MatToBase64(state->originalImg);
-			state->originalBase64.hasData = true;
+		if (!state.originalBase64.hasData) {
+			state.originalBase64.data = MatToBase64(state.originalImg);
+			state.originalBase64.hasData = true;
 		}
 		return{
-			{"width", state->originalImg.cols},
-			{"height", state->originalImg.rows},
-			{"data", state->originalBase64.data}
+			{"width", state.originalImg.cols},
+			{"height", state.originalImg.rows},
+			{"data", state.originalBase64.data}
 		};
 	});
 	wsVar.register_getter("image.realtime", [&]() -> json {
-		if (!state->realtimeBase64.hasData) {
-			state->realtimeBase64.data = MatToBase64(state->realtimeImg);
-			state->realtimeBase64.hasData = true;
+		if (!state.realtimeBase64.hasData) {
+			state.realtimeBase64.data = MatToBase64(state.realtimeImg);
+			state.realtimeBase64.hasData = true;
 		}
 		return{
-			{"width", state->realtimeImg.cols},
-			{"height", state->realtimeImg.rows},
-			{"data", state->realtimeBase64.data}
+			{"width", state.realtimeImg.cols},
+			{"height", state.realtimeImg.rows},
+			{"data", state.realtimeBase64.data}
 		};
 	});
 	wsVar.register_getter("image.diff", [&]() -> json {
-		if (!state->diffBase64.hasData) {
-			state->diffBase64.data = MatToBase64(state->diffImg);
-			state->diffBase64.hasData = true;
+		if (!state.diffBase64.hasData) {
+			state.diffBase64.data = MatToBase64(state.diffImg);
+			state.diffBase64.hasData = true;
 		}
 		return{
-			{"width", state->diffImg.cols},
-			{"height", state->diffImg.rows},
-			{"data", state->diffBase64.data}
+			{"width", state.diffImg.cols},
+			{"height", state.diffImg.rows},
+			{"data", state.diffBase64.data}
 		};
 	});
 }
@@ -140,6 +144,7 @@ bool ModuleSystem::can_bind(const std::string& ip, unsigned short port)
 
 void ModuleSystem::start()
 {
+	loadSettings();
 	if (settings.useServer) {
 		if (can_bind(settings.serverIP, settings.serverPort)) {
 			server.start(settings.serverIP, settings.serverPort);
@@ -156,6 +161,7 @@ void ModuleSystem::start()
 }
 void ModuleSystem::stop()
 {
+	saveSettings();
 	server.stop();
 }
 void ModuleSystem::update()
@@ -179,10 +185,31 @@ void ModuleSystem::drawMenuItems()
 {
 	ImGui::MenuItem("ウィンドウ管理", nullptr, &windowStates.showWindowManager);
 	ImGui::MenuItem("モジュール設定", nullptr, &windowStates.showModuleSettings);
+	if (ImGui::MenuItem("モジュール管理")) {
+		mm.SetShow(true);
+	}
 }
 bool ModuleSystem::needsRestart() const {
 	return restartRequested;
 }
 ModuleSettings::Settings ModuleSystem::getUpdatedSettings() const {
 	return moduleSettingsWindow.GetTempSettings();
+}
+void ModuleSystem::loadSettings()
+{
+	ModuleSettings::Settings loadedSettings;
+	if (ModuleSettings::IO::Load(loadedSettings)) {
+		settings = loadedSettings;
+		moduleSettingsWindow = ModuleSettings::ModuleSettingsWindow(settings);
+	}
+	else {
+		std::cerr << "モジュール設定の読み込みに失敗しました。デフォルト設定を使用します。" << std::endl;
+	}
+}
+void ModuleSystem::saveSettings()
+{
+	ModuleSettings::Settings currentSettings = moduleSettingsWindow.GetTempSettings();
+	if (!ModuleSettings::IO::Save(currentSettings)) {
+		std::cerr << "モジュール設定の保存に失敗しました。" << std::endl;
+	}
 }

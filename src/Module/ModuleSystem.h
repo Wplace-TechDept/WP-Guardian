@@ -1,19 +1,17 @@
 #pragma once
-#include "ModuleSettings/Core/ModuleSettings.h"
-#include "ModuleSettings/UI/ModuleSettingsWindow.h"
+#include "ModuleSettings.h"
+#include "ModuleSettingsWindow.h"
 #include "AppState.h"
 #include "Server/Server.h"
 #include "ImWS/ImWS.h"
 #include "WSVariable/WSVariable.h"
 #include "ModuleManager/ModuleManager.h"
-#include "Settings/Core/Settings.h"
-#include "Settings/Core/SettingsJSON.h"
 #include "Base64Codec/Base64Codec.h"
 #include <string>
 
 class ModuleSystem {
 public:
-	ModuleSystem(const ModuleSettings::Settings& settings, AppState& state);
+    ModuleSystem(AppState& state);  // settings引数を削除
 	~ModuleSystem();
     void start();   // サーバー起動 + モジュール自動起動
     void stop();    // サーバー停止
@@ -28,7 +26,7 @@ public:
     ModuleSettings::Settings getUpdatedSettings() const;
 
 private:
-    AppState* state = nullptr;
+    AppState& state;
     ModuleSettings::Settings settings;
     ModuleSettings::ModuleWindowStates windowStates;
 
@@ -40,6 +38,8 @@ private:
 
     bool restartRequested = false;
 
+	void loadSettings();
+	void saveSettings();
     void bindWebSocket();
     void registerVariables();  // wsVar.register_* を全部ここに
     bool can_bind(const std::string& ip, unsigned short port);
