@@ -19,6 +19,16 @@ namespace ModuleSettings
 			}
 			return true;
 		}
+		bool ToJSON(json& j, const ModuleWindowStates& windowStates) {
+			try {
+				j["ModuleWindowStates"] = {
+					{"showWindowManager", windowStates.showWindowManager},
+					{"showModuleSettings", windowStates.showModuleSettings}
+				};
+			}
+			catch (...) { return false; }
+			return true;
+		}
 		bool FromJSON(const json& j, Settings& moduleSettings)
 		{
 			try {
@@ -31,6 +41,15 @@ namespace ModuleSettings
 			catch (...) {
 				return false;
 			}
+			return true;
+		}
+		bool FromJSON(const json& j, ModuleWindowStates& windowStates) {
+			try {
+				const auto& w = j.at("ModuleWindowStates");
+				assign_if_exists(w, "showWindowManager", windowStates.showWindowManager);
+				assign_if_exists(w, "showModuleSettings", windowStates.showModuleSettings);
+			}
+			catch (...) { return false; }
 			return true;
 		}
 	}

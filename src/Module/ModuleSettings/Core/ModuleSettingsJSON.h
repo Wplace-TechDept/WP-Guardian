@@ -11,5 +11,7 @@ namespace ModuleSettings
 	{
 		bool ToJSON(json& j, const Settings& moduleSettings);
 		bool FromJSON(const json& j, Settings& moduleSettings);
+		bool ToJSON(json& j, const ModuleWindowStates& windowStates);
+		bool FromJSON(const json& j, ModuleWindowStates& windowStates);
 	}
 }

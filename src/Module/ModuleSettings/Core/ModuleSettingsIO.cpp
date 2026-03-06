@@ -9,11 +9,12 @@ using json = nlohmann::json;
 namespace ModuleSettings
 {
 	namespace IO {
-		bool Save(const Settings& moduleSettings) {
+		bool Save(const Settings& moduleSettings, const ModuleWindowStates& moduleWindowStates) {
 			try {
 				json j;
 				// ModuleSettingsJSON ‚Ì ToJSON ‚ðŽg‚¤
 				if (!JSON::ToJSON(j, moduleSettings)) return false;
+				if (!JSON::ToJSON(j, moduleWindowStates)) return false;
 				std::ofstream ofs(PathUtil::GetExeDir() + "module_settings.json");
 				if (!ofs.is_open()) return false;
 				ofs << j.dump(4);
@@ -23,7 +24,7 @@ namespace ModuleSettings
 				return false;
 			}
 		}
-		bool Load(Settings& moduleSettings) {
+		bool Load(Settings& moduleSettings, ModuleWindowStates& moduleWindowStates) {
 			try {
 				std::ifstream ifs(PathUtil::GetExeDir() + "module_settings.json");
 				if (!ifs.is_open()) return false;
@@ -31,6 +32,7 @@ namespace ModuleSettings
 				ifs >> j;
 				// ModuleSettingsJSON ‚Ì FromJSON ‚ðŽg‚¤
 				if (!JSON::FromJSON(j, moduleSettings)) return false;
+				JSON::FromJSON(j, moduleWindowStates);
 				return true;
 			}
 			catch (...) {

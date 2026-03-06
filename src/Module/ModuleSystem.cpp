@@ -201,8 +201,10 @@ ModuleSettings::Settings ModuleSystem::getUpdatedSettings() const {
 void ModuleSystem::loadSettings()
 {
 	ModuleSettings::Settings loadedSettings;
-	if (ModuleSettings::IO::Load(loadedSettings)) {
+	ModuleSettings::ModuleWindowStates loadedWindowStates;
+	if (ModuleSettings::IO::Load(loadedSettings, loadedWindowStates)) {
 		settings = loadedSettings;
+		windowStates = loadedWindowStates;
 		moduleSettingsWindow = ModuleSettings::ModuleSettingsWindow(settings);
 	}
 	else {
@@ -212,7 +214,8 @@ void ModuleSystem::loadSettings()
 void ModuleSystem::saveSettings()
 {
 	ModuleSettings::Settings currentSettings = moduleSettingsWindow.GetTempSettings();
-	if (!ModuleSettings::IO::Save(currentSettings)) {
+	ModuleSettings::ModuleWindowStates currentWindowStates = windowStates;
+	if (!ModuleSettings::IO::Save(currentSettings, currentWindowStates)) {
 		std::cerr << "モジュール設定の保存に失敗しました。" << std::endl;
 	}
 }
