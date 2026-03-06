@@ -1,6 +1,6 @@
-#pragma once
-#include "ModuleSettings.h"
-#include "ModuleSettingsWindow.h"
+ï»¿#pragma once
+#include "ModuleSettings/Core/ModuleSettings.h"
+#include "ModuleSettings/UI/ModuleSettingsWindow.h"
 #include "AppState.h"
 #include "Server/Server.h"
 #include "ImWS/ImWS.h"
@@ -11,17 +11,18 @@
 
 class ModuleSystem {
 public:
-    ModuleSystem(AppState& state);  // settingsˆø”‚ğíœ
+    ModuleSystem(AppState& state);  // settingså¼•æ•°ã‚’å‰Šé™¤
 	~ModuleSystem();
-    void start();   // ƒT[ƒo[‹N“® + ƒ‚ƒWƒ…[ƒ‹©“®‹N“®
-    void stop();    // ƒT[ƒo[’â~
+    void start();   // ã‚µãƒ¼ãƒãƒ¼èµ·å‹• + ãƒ¢ã‚¸ãƒ¥ãƒ¼ãƒ«è‡ªå‹•èµ·å‹•
+    void stop();    // ã‚µãƒ¼ãƒãƒ¼åœæ­¢
 
-    // ƒƒCƒ“ƒ‹[ƒv“à
+    // ãƒ¡ã‚¤ãƒ³ãƒ«ãƒ¼ãƒ—å†…
     void update();          // imws.update() + wsVar.update()
     void drawUI();          // ModuleSettingsWindow + mm.ShowWindow
-    void drawMenuItems();   // ƒƒjƒ…[ƒo[‚ÌŠY“–€–Ú
+    void drawWindowMenuItems();   // ãƒ¡ãƒ‹ãƒ¥ãƒ¼ãƒãƒ¼ã®è©²å½“é …ç›®
+	void drawModuleManagerMenuItems();   // ãƒ¢ã‚¸ãƒ¥ãƒ¼ãƒ«ã”ã¨ã®ãƒ¡ãƒ‹ãƒ¥ãƒ¼é …ç›®
 
-    // Ä‹N“®ƒtƒ‰ƒO
+    // å†èµ·å‹•ãƒ•ãƒ©ã‚°
     bool needsRestart() const;
     ModuleSettings::Settings getUpdatedSettings() const;
 
@@ -41,7 +42,7 @@ private:
 	void loadSettings();
 	void saveSettings();
     void bindWebSocket();
-    void registerVariables();  // wsVar.register_* ‚ğ‘S•”‚±‚±‚É
+    void registerVariables();  // wsVar.register_* ã‚’å…¨éƒ¨ã“ã“ã«
     bool can_bind(const std::string& ip, unsigned short port);
     std::string MatToBase64(const cv::Mat& mat);
 

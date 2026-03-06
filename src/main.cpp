@@ -31,7 +31,11 @@
 #include "Settings/UI/AppSettingsWindow.h"
 #include "Settings/UI/UISettingsWindow.h"
 #include "PathUtil.h"
+#include "AppState.h"
 
+#ifdef ENABLE_MODULE_SYSTEM
+#include "Module/ModuleSystem.h"
+#endif
 
 using json = nlohmann::json;
 
@@ -342,51 +346,82 @@ int main()
     ImFont* font = io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/meiryo.ttc", 18.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
     ImFont* bigFont = io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/meiryo.ttc", 25.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
     if (!font)
-        std::cerr << "フォント読み込み失敗！\n";
+        std::cerr << "フォント読み込み失敗\n";
     if (!bigFont)
-        std::cerr << "フォント読み込み失敗！\n";
+        std::cerr << "フォント読み込み失敗\n";
 	// -----------------
 
 
     // アプリ起動時に設定を読み込む
     Settings::IO::Load(windowStates, appSettings, updateCache, uiSettings);
 
-    cv::Mat originalImg = cv::imread(appSettings.imgPath, cv::IMREAD_UNCHANGED);
-    if (originalImg.empty())
+    AppState state;
+
+    state.appSettings = &appSettings;
+
+#ifdef ENABLE_MODULE_SYSTEM
+    ModuleSystem moduleSystem(state);
+    moduleSystem.start();
+#endif
+
+    state.originalImg = cv::imread(appSettings.imgPath, cv::IMREAD_UNCHANGED);
+    if (state.originalImg.empty())
     {
-        originalImg = cv::Mat(1, 1, CV_8UC4, cv::Scalar(0, 0, 0, 0));
+        state.originalImg = cv::Mat(1, 1, CV_8UC4, cv::Scalar(0, 0, 0, 0));
     }
-    ensureBGRA(originalImg);
-    int width = originalImg.cols;
-    int height = originalImg.rows;
+    ensureBGRA(state.originalImg);
 
-    cv::Mat realtimeImg = cv::Mat::zeros(height, width, CV_8UC4);
-	cv::Mat diffImg = cv::Mat::zeros(height, width, CV_8UC4);
 
-    GLuint originalTexID = matToTexture(originalImg);
-    GLuint realtimeTexID = createEmptyTexture(width, height);
-    GLuint diffTexID = createEmptyTexture(width, height);
+    state.width = state.originalImg.cols;
+    state.height = state.originalImg.rows;
+
+    state.realtimeImg = cv::Mat::zeros(state.height, state.width, CV_8UC4);
+    state.diffImg = cv::Mat::zeros(state.height, state.width, CV_8UC4);
+
+    GLuint originalTexID = matToTexture(state.originalImg);
+    GLuint realtimeTexID = createEmptyTexture(state.width, state.height);
+    GLuint diffTexID = createEmptyTexture(state.width, state.height);
 
 	ImageProcessing imgProc;
 	imgProc.SetTileParams(appSettings.tile_x, appSettings.tile_y, appSettings.pixel_x, appSettings.pixel_y);
 	imgProc.SetDiffPattern(appSettings.diffPattern);
 	imgProc.SetUpdateSpeed(appSettings.updateSpeed);
-	imgProc.SetOriginalImage(originalImg);
+	imgProc.SetOriginalImage(state.originalImg);
 
-	int totalPixels = 0;
-	int diffPixels = 0;
-	double diffPercent = 0;
+	state.totalPixels = 0;
+    state.diffPixels = 0;
+    state.diffPercent = 0;
 
 	Settings::AppSettingsWindow settingsWindow(appSettings,window,bigFont);
 	Settings::UISettingsWindow uiSettingsWindow;
 
-    bool update = false;
+    state.getTempSettings = [&]() { return settingsWindow.GetTempSettings(); };
+    state.setTempSettings = [&](const Settings::AppSettings& s) { settingsWindow.SetTempSettings(s); };
 
-    ImageViewer OriginalViewer(width, height);
-	ImageViewer RealtimeViewer(width, height);
-	ImageViewer DiffViewer(width, height);
+    state.update = false;
+
+    ImageViewer OriginalViewer(state.width, state.height);
+	ImageViewer RealtimeViewer(state.width, state.height);
+	ImageViewer DiffViewer(state.width, state.height);
 
     imgProc.start();
+
+    auto cleanup = [&]() {
+        imgProc.stop();
+#ifdef ENABLE_MODULE_SYSTEM
+        moduleSystem.stop();
+#endif
+        glDeleteTextures(1, &originalTexID);
+        glDeleteTextures(1, &realtimeTexID);
+        glDeleteTextures(1, &diffTexID);
+        Settings::IO::Save(windowStates, appSettings, updateCache, uiSettings);
+        ImGui::SaveIniSettingsToDisk(imguiIniPath.c_str());
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        };
 
     glfwSetWindowCloseCallback(window, [](GLFWwindow* win)
         {
@@ -413,20 +448,29 @@ int main()
                 ImGui::MenuItem("設定", nullptr, &windowStates.showSettings);
                 ImGui::MenuItem("情報", nullptr, &windowStates.showInfo);
 				ImGui::MenuItem("UI設定", nullptr, &windowStates.showUISettings);
+#ifdef ENABLE_MODULE_SYSTEM
+                moduleSystem.drawWindowMenuItems();
+#endif
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("詳細"))
             {
                 ImGui::MenuItem("アップデートを確認", nullptr, &showVersion);
-                if (ImGui::MenuItem("モジュール管理")) {
-                    mm.SetShow(true);
-                }
+#ifdef ENABLE_MODULE_SYSTEM
+                moduleSystem.drawModuleManagerMenuItems();
+#endif
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
         }
 
         showVersionWindow();
+
+#ifdef ENABLE_MODULE_SYSTEM
+        moduleSystem.update();
+        moduleSystem.drawUI();
+#endif
+
 		uiSettingsWindow.Draw(windowStates.showUISettings, uiSettings);
 
 
@@ -501,52 +545,23 @@ int main()
 			DiffViewer.Draw((ImTextureID)(intptr_t)diffTexID);
             ImGui::End();
         }
-
-		auto result = moduleSettingsWindow.Draw(windowStates.showModuleSetting);
-        if (result.openModuleManager) {
-			mm.SetShow(true);
-		}
-        if (result.updated) {
-
-            int result = MessageBoxW(NULL,
+#ifdef ENABLE_MODULE_SYSTEM
+        if (moduleSystem.needsRestart()) {
+            int answer = MessageBoxW(NULL,
                 L"設定を反映するにはアプリを再起動します。\n再起動しますか？",
                 L"再起動", MB_YESNO | MB_ICONQUESTION);
 
-            if (result == IDYES)
+            if (answer == IDYES)
             {
-				auto newSettings = moduleSettingsWindow.GetTempSettings();
-                moduleSettings.useServer = newSettings.useServer;
-                moduleSettings.autoStartModules = newSettings.autoStartModules;
-                moduleSettings.serverPort = newSettings.serverPort;
-                moduleSettings.serverIP = newSettings.serverIP;
-
-                imgProc.stop();
-
-                glDeleteTextures(1, &originalTexID);
-                glDeleteTextures(1, &realtimeTexID);
-                glDeleteTextures(1, &diffTexID);
-
-				Settings::IO::Save(windowStates, appSettings, moduleSettings, updateCache, uiSettings);
-                ImGui::SaveIniSettingsToDisk(imguiIniPath.c_str());
-                ImGui_ImplOpenGL3_Shutdown();
-                ImGui_ImplGlfw_Shutdown();
-                ImGui::DestroyContext();
-                glfwDestroyWindow(window);
-                glfwTerminate();
-
-                server.stop();
-
-                // 自分自身を再起動
-                char exePath[MAX_PATH];
-                GetModuleFileNameA(NULL, exePath, MAX_PATH);
-                ShellExecuteA(NULL, "open", exePath, NULL, NULL, SW_SHOWDEFAULT);
-
+                std::string exePath = GetExeDir() + "WP-Guardian.exe";
+                cleanup();
+                ShellExecuteA(NULL, "open", exePath.c_str(), NULL, NULL, SW_SHOWDEFAULT);
                 exit(0);
             }
         }
-
-        if (settingsWindow.Draw(windowStates.showSettings)||update) {
-            update = false;
+#endif
+        if (settingsWindow.Draw(windowStates.showSettings)|| state.update) {
+            state.update = false;
 
             Settings::AppSettings newSettings = settingsWindow.GetTempSettings();
             appSettings.imgPath = newSettings.imgPath;
@@ -556,18 +571,18 @@ int main()
                 cv::Mat newImg = cv::imread(appSettings.imgPath, cv::IMREAD_UNCHANGED);
                 if (!newImg.empty())
                 {
-                    originalImg = newImg.clone();
-                    ensureBGRA(originalImg);
-                    imgProc.SetOriginalImage(originalImg);
-                    width = originalImg.cols;
-                    height = originalImg.rows;
+                    state.originalImg = newImg.clone();
+                    ensureBGRA(state.originalImg);
+                    imgProc.SetOriginalImage(state.originalImg);
+                    state.width = state.originalImg.cols;
+                    state.height = state.originalImg.rows;
 
-                    originalBase64.data.clear();
-                    originalBase64.hasData = false;
+                    state.originalBase64.data.clear();
+                    state.originalBase64.hasData = false;
 
-                    OriginalViewer.SetImageSize(width, height);
-                    RealtimeViewer.SetImageSize(width, height);
-                    DiffViewer.SetImageSize(width, height);
+                    OriginalViewer.SetImageSize(state.width, state.height);
+                    RealtimeViewer.SetImageSize(state.width, state.height);
+                    DiffViewer.SetImageSize(state.width, state.height);
                     OriginalViewer.ResetView();
                     RealtimeViewer.ResetView();
                     DiffViewer.ResetView();
@@ -579,9 +594,9 @@ int main()
                     glDeleteTextures(1, &realtimeTexID);
                     glDeleteTextures(1, &diffTexID);
 
-                    realtimeTexID = createEmptyTexture(width, height);
-                    diffTexID = createEmptyTexture(width, height);
-					std::cout << "画像を更新しました: " << appSettings.imgPath << " (" << width << "x" << height << ")\n";
+                    realtimeTexID = createEmptyTexture(state.width, state.height);
+                    diffTexID = createEmptyTexture(state.width, state.height);
+					std::cout << "画像を更新しました: " << appSettings.imgPath << " (" << state.width << "x" << state.height << ")\n";
                 }
             }
 
@@ -600,23 +615,23 @@ int main()
             ImageProcessing::Output output;
 
             if (imgProc.fetchOutput(output)) {
-                diffPercent = output.diffPercent;
-                totalPixels = output.totalOpaquePixels;
-                diffPixels = output.diffPixels;
+                state.diffPercent = output.diffPercent;
+                state.totalPixels = output.totalOpaquePixels;
+                state.diffPixels = output.diffPixels;
                 // テクスチャを更新
-                if (!SafeUploadTexture(realtimeTexID, width, height, output.realtimeImg)) {
+                if (!SafeUploadTexture(realtimeTexID, state.width, state.height, output.realtimeImg)) {
                     std::cerr << "Failed to upload realtime texture\n";
                 }
-                realtimeImg = output.realtimeImg.clone();
-                if (!SafeUploadTexture(diffTexID, width, height, output.diffImg)) {
+                state.realtimeImg = output.realtimeImg.clone();
+                if (!SafeUploadTexture(diffTexID, state.width, state.height, output.diffImg)) {
                     std::cerr << "Failed to upload diff texture\n";
                 }
-                diffImg = output.diffImg.clone();
+                state.diffImg = output.diffImg.clone();
 
-                realtimeBase64.data.clear();
-                realtimeBase64.hasData = false;
-                diffBase64.data.clear();
-                diffBase64.hasData = false;
+                state.realtimeBase64.data.clear();
+                state.realtimeBase64.hasData = false;
+                state.diffBase64.data.clear();
+                state.diffBase64.hasData = false;
             }
         }
 
@@ -625,8 +640,8 @@ int main()
             ImGui::Begin("情報", &windowStates.showInfo);
             ImGui::PushFont(bigFont);
             {
-                ImGui::Text("差分率: %.2f%%", diffPercent);
-                ImGui::Text("%d / %d", diffPixels, totalPixels);
+                ImGui::Text("差分率: %.2f%%", state.diffPercent);
+                ImGui::Text("%d / %d", state.diffPixels, state.totalPixels);
             }
             ImGui::PopFont();
             ImGui::End();
@@ -652,21 +667,6 @@ int main()
         glfwSwapBuffers(window);
     }
 
-	imgProc.stop();
-
-    glDeleteTextures(1, &originalTexID);
-    glDeleteTextures(1, &realtimeTexID);
-    glDeleteTextures(1, &diffTexID);
-
-    Settings::IO::Save(windowStates, appSettings, updateCache, uiSettings);
-
-
-    ImGui::SaveIniSettingsToDisk(imguiIniPath.c_str());
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-    glfwDestroyWindow(window);
-    glfwTerminate();
-
+    cleanup();
     return 0;
 }

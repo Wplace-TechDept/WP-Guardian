@@ -12,6 +12,7 @@ namespace Settings {
 		~AppSettingsWindow();
 		bool Draw(bool& isShow);
 		AppSettings& GetTempSettings() { return tempSettings; }
+		void SetTempSettings(const AppSettings& s) { tempSettings = s; }
 	private:
 		AppSettings tempSettings{};
 		GLFWwindow* window = nullptr;

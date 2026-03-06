@@ -1,6 +1,8 @@
 #pragma once 
 #include "Settings.h"
 #include "nlohmann/json.hpp"
+#include "JsonUtil.h"
+
 
 using json = nlohmann::json;
 
@@ -15,11 +17,4 @@ namespace Settings {
 		bool FromJSON(const json& j, UpdateCache& updateCache);
 		bool FromJSON(const json& j, UISettings& uiSettings);
 	}
-}
-
-template<typename T>
-void assign_if_exists(const json& j, const char* key, T& dst)
-{
-	if (j.contains(key))
-		dst = j[key].get<T>();
 }

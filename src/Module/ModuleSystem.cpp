@@ -2,8 +2,8 @@
 #include "imgui.h"
 #include <iostream>
 #include <nlohmann/json.hpp>
-#include "ModuleSettingsJSON.h"
-#include "ModuleSettingsIO.h"
+#include "ModuleSettings/Core/ModuleSettingsJSON.h"
+#include "ModuleSettings/Core/ModuleSettingsIO.h"
 #include "SettingsJSON.h"
 
 using json = nlohmann::json;
@@ -181,10 +181,13 @@ void ModuleSystem::drawUI()
 	}
 	mm.ShowWindow();
 }
-void ModuleSystem::drawMenuItems()
+void ModuleSystem::drawWindowMenuItems()
 {
 	ImGui::MenuItem("ウィンドウ管理", nullptr, &windowStates.showWindowManager);
 	ImGui::MenuItem("モジュール設定", nullptr, &windowStates.showModuleSettings);
+}
+void ModuleSystem::drawModuleManagerMenuItems()
+{
 	if (ImGui::MenuItem("モジュール管理")) {
 		mm.SetShow(true);
 	}
