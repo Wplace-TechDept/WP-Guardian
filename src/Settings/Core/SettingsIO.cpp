@@ -20,7 +20,7 @@ namespace Settings {
 				if (!JSON::ToJSON(j, uiSettings)) return false;
 
 
-                std::ofstream ofs(GetExeDir() + "settings.json");
+                std::ofstream ofs(PathUtil::GetExeDir() + "settings.json");
                 if (!ofs.is_open()) return false;
                 ofs << j.dump(4);
 
@@ -33,7 +33,7 @@ namespace Settings {
 
         bool Load(WindowStates& windowStates, AppSettings& appSettings, UpdateCache& updateCache, UISettings& uiSettings) {
             try {
-                std::ifstream ifs(GetExeDir() + "settings.json");
+                std::ifstream ifs(PathUtil::GetExeDir() + "settings.json");
                 if (!ifs.is_open()) return false;
 
                 json j;

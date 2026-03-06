@@ -3,10 +3,10 @@
 
 namespace ModuleSettings {
     struct Settings {
-        bool autoStartModules;
-        bool useServer;
-        std::string serverIP;
-        int serverPort;
+        bool autoStartModules = false;
+        bool useServer = false;
+        std::string serverIP = "127.0.0.1";
+        int serverPort = 9002;
     };
     struct ModuleWindowStates {
         bool showWindowManager = false;

@@ -12,7 +12,7 @@ ModuleManager::ModuleManager(const std::string& path)
         moduleListPath = path;
     }
     else {
-        moduleListPath = GetExeDir() + path;
+        moduleListPath = PathUtil::GetExeDir() + path;
     }
 }
 

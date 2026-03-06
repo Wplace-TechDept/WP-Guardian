@@ -14,7 +14,7 @@ namespace ModuleSettings
 				json j;
 				// ModuleSettingsJSON ‚Ì ToJSON ‚ðŽg‚¤
 				if (!JSON::ToJSON(j, moduleSettings)) return false;
-				std::ofstream ofs(GetExeDir() + "module_settings.json");
+				std::ofstream ofs(PathUtil::GetExeDir() + "module_settings.json");
 				if (!ofs.is_open()) return false;
 				ofs << j.dump(4);
 				return true;
@@ -25,7 +25,7 @@ namespace ModuleSettings
 		}
 		bool Load(Settings& moduleSettings) {
 			try {
-				std::ifstream ifs(GetExeDir() + "module_settings.json");
+				std::ifstream ifs(PathUtil::GetExeDir() + "module_settings.json");
 				if (!ifs.is_open()) return false;
 				json j;
 				ifs >> j;
