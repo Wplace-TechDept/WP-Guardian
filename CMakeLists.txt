@@ -8,21 +8,30 @@ add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 
 option(ENABLE_MODULE_SYSTEM "Enable WebSocket module system" ON)
 
-# 外部ライブラリ
-find_package(glfw3 CONFIG REQUIRED)
-find_package(OpenCV REQUIRED)
-find_package(OpenGL REQUIRED)
-find_package(GLEW REQUIRED)
-find_package(cpr REQUIRED)
-find_package(asio CONFIG REQUIRED)
-find_package(nlohmann_json CONFIG REQUIRED)
-
 # ディレクトリ指定
 set(LIB_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 set(IMGUI_DIR   ${LIB_DIR}/imgui)
 set(WEBSOCKETPP_DIR ${LIB_DIR}/websocketpp)
 set(SRC_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(MODULE_DIR  ${SRC_DIR}/Module)
+
+
+# 外部ライブラリ
+if(NOT EMSCRIPTEN)
+    find_package(glfw3 CONFIG REQUIRED)
+    find_package(OpenGL REQUIRED)
+    find_package(GLEW REQUIRED)
+    find_package(cpr REQUIRED)
+    find_package(asio CONFIG REQUIRED)
+endif()
+find_package(OpenCV REQUIRED)
+if(EMSCRIPTEN)
+    add_library(nlohmann_json INTERFACE)
+    target_include_directories(nlohmann_json INTERFACE ${LIB_DIR})
+    add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+else()
+    find_package(nlohmann_json CONFIG REQUIRED)
+endif()
 
 # ImGui ソース
 set(IMGUI_SRC
@@ -50,9 +59,9 @@ add_library(ImageViewer STATIC
 target_include_directories(ImageViewer PRIVATE
     ${IMGUI_DIR}
 )
-target_link_libraries(ImageViewer PRIVATE
-    glfw
-)
+if(NOT EMSCRIPTEN)
+    target_link_libraries(ImageViewer PRIVATE glfw)
+endif()
 
 # ===== ImageProcessing =====
 add_library(ImageProcessing STATIC
@@ -61,9 +70,11 @@ add_library(ImageProcessing STATIC
 )
 target_link_libraries(ImageProcessing PRIVATE
     ${OpenCV_LIBS}
-    cpr::cpr
     Utils
 )
+if(NOT EMSCRIPTEN)
+    target_link_libraries(ImageProcessing PRIVATE cpr::cpr)
+endif()
 
 # ===== VersionManager =====
 add_library(VersionManager STATIC
@@ -71,9 +82,11 @@ add_library(VersionManager STATIC
     ${SRC_DIR}/VersionManager/VersionManager.h
 )
 target_link_libraries(VersionManager PRIVATE
-    cpr::cpr
     nlohmann_json::nlohmann_json
 )
+if(NOT EMSCRIPTEN)
+    target_link_libraries(VersionManager PRIVATE cpr::cpr)
+endif()
 
 # ===== Settings =====
 set(SETTINGS_CORE_DIR ${SRC_DIR}/Settings/Core)
@@ -107,8 +120,10 @@ target_include_directories(SettingsUI PUBLIC
 )
 target_link_libraries(SettingsUI PRIVATE
     SettingsCore
-    glfw
 )
+if(NOT EMSCRIPTEN)
+    target_link_libraries(SettingsUI PRIVATE glfw)
+endif()
 
 # ===== Module =====
 set(MODULE_SETTINGS_CORE_DIR ${MODULE_DIR}/ModuleSettings/Core)
@@ -250,15 +265,35 @@ if(ENABLE_MODULE_SYSTEM)
 endif()
 
 # ===== 実行ファイル =====
-add_executable(WP_Guardian
-    ${SRC_DIR}/main.cpp
-    ${IMGUI_SRC}
-    app.rc
-)
+if(EMSCRIPTEN)
+    add_executable(WP_Guardian
+        ${SRC_DIR}/main.cpp
+        ${IMGUI_SRC}
+    )
+else()
+    add_executable(WP_Guardian
+        ${SRC_DIR}/main.cpp
+        ${IMGUI_SRC}
+        app.rc
+    )
+endif()
 
 if(MSVC)
     target_link_options(WP_Guardian PRIVATE "/SUBSYSTEM:WINDOWS" "/ENTRY:mainCRTStartup")
     add_compile_options(/utf-8)
+endif()
+
+if(EMSCRIPTEN)
+    set_target_properties(WP_Guardian PROPERTIES
+        SUFFIX ".html"
+    )
+    target_link_options(WP_Guardian PRIVATE
+        -sUSE_GLFW=3
+        -sUSE_WEBGL2=1
+        -sFULL_ES3=1
+        -sALLOW_MEMORY_GROWTH=1
+        --preload-file assets
+    )
 endif()
 
 target_include_directories(WP_Guardian PRIVATE
@@ -267,23 +302,35 @@ target_include_directories(WP_Guardian PRIVATE
     ${IMGUI_DIR}/backends
     ${OpenCV_INCLUDE_DIRS}
 )
-
-target_link_libraries(WP_Guardian PRIVATE
-    glfw
-    OpenGL::GL
-    ${OpenCV_LIBS}
-    GLEW::GLEW
-    cpr::cpr
-    ImageProcessing
-    VersionManager
-    ImageViewer
-    SettingsCore
-    SettingsUI
-    ModuleSettingsCore
-    Utils
-    $<$<BOOL:${ENABLE_MODULE_SYSTEM}>:ModuleSystemLib>
-)
-
+if(EMSCRIPTEN)
+    target_link_libraries(WP_Guardian PRIVATE
+        ${OpenCV_LIBS}
+        ImageProcessing
+        VersionManager
+        ImageViewer
+        SettingsCore
+        SettingsUI
+        ModuleSettingsCore
+        Utils
+        # glfw, OpenGL, GLEWはEmscriptenが内包
+    )
+else()
+    target_link_libraries(WP_Guardian PRIVATE
+        glfw
+        OpenGL::GL
+        ${OpenCV_LIBS}
+        GLEW::GLEW
+        cpr::cpr
+        ImageProcessing
+        VersionManager
+        ImageViewer
+        SettingsCore
+        SettingsUI
+        ModuleSettingsCore
+        Utils
+        $<$<BOOL:${ENABLE_MODULE_SYSTEM}>:ModuleSystemLib>
+    )
+endif()
 # ===== ビルド後処理 =====
 add_custom_command(TARGET WP_Guardian POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:WP_Guardian>/assets"
