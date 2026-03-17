@@ -292,6 +292,7 @@ if(EMSCRIPTEN)
         -sUSE_WEBGL2=1
         -sFULL_ES3=1
         -sALLOW_MEMORY_GROWTH=1
+        -sASYNCIFY=1
         --preload-file assets
     )
 endif()

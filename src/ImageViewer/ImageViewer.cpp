@@ -1,4 +1,4 @@
-#include "ImageViewer.h"
+ï»¿#include "ImageViewer.h"
 
 
 ImageViewer::ImageViewer(int w,int h)
@@ -21,7 +21,7 @@ void ImageViewer::Update(GLFWwindow* window) {
     winAspect = winSize.x / winSize.y;
     UVUtil::CalcUVForAspect(imgAspect, winAspect, uv0, uv1);
 
-    // ƒhƒ‰ƒbƒO’†A‚Ü‚½‚Íƒzƒo[’†‚Ì‚İˆ—‚ğ‘±s
+    // ãƒ‰ãƒ©ãƒƒã‚°ä¸­ã€ã¾ãŸã¯ãƒ›ãƒãƒ¼ä¸­ã®ã¿å‡¦ç†ã‚’ç¶šè¡Œ
     if (!isHovered && !isPanning)
         return;
 
@@ -29,7 +29,7 @@ void ImageViewer::Update(GLFWwindow* window) {
     ImVec2 windowPos = ImGui::GetWindowPos();
     ImVec2 uvMousePos = UVUtil::ScreenPosToUV(mousePos, windowPos, winSize, uv0, uv1);
 
-    // --- 2. ƒY[ƒ€ˆ— ---
+    // --- 2. ã‚ºãƒ¼ãƒ å‡¦ç† ---
     if (isHovered && io.MouseWheel != 0.0f) {
         UVUtil::ZoomDir factor = (io.MouseWheel > 0.0f) ? UVUtil::ZoomDir::ZoomIn : UVUtil::ZoomDir::ZoomOut;
         UVUtil::ApplyZoom(uv0, uv1, uvMousePos, factor);
@@ -38,19 +38,18 @@ void ImageViewer::Update(GLFWwindow* window) {
         event.zoomFactor = factor;
     }
 
-    // --- 3. ƒJ[ƒ\ƒ‹•\¦Ø‚è‘Ö‚¦ ---
+    // --- 3. ã‚«ãƒ¼ã‚½ãƒ«è¡¨ç¤ºåˆ‡ã‚Šæ›¿ãˆ ---
     if (isHovered && !isPanning) {
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
     }
 
-    // --- 4. ƒhƒ‰ƒbƒOiƒpƒjƒ“ƒOjˆ— ---
+    // --- 4. ãƒ‰ãƒ©ãƒƒã‚°ï¼ˆãƒ‘ãƒ‹ãƒ³ã‚°ï¼‰å‡¦ç† ---
     if (ImGui::IsMouseDragging(ImGuiMouseButton_Left) && mousePressedOnImage) {
         if (!isPanning) {
             isPanning = true;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }
 
-        // uŒÅ’è‚µ‚ÄˆÚ“®‹——£‚¾‚¯æ‚évê‡‚Í io.MouseDelta ‚ªÅ“K
+        // ã€Œå›ºå®šã—ã¦ç§»å‹•è·é›¢ã ã‘å–ã‚‹ã€å ´åˆã¯ io.MouseDelta ãŒæœ€é©
         ImVec2 delta{
             io.MouseDelta.x / winSize.x * (uv1.x - uv0.x),
             io.MouseDelta.y / winSize.y * (uv1.y - uv0.y)
@@ -63,12 +62,12 @@ void ImageViewer::Update(GLFWwindow* window) {
         event.panDelta = delta;
     }
     else if (isPanning) {
-        // ¶ƒNƒŠƒbƒN‚ª—£‚³‚ê‚½uŠÔ
+        // å·¦ã‚¯ãƒªãƒƒã‚¯ãŒé›¢ã•ã‚ŒãŸç¬é–“
         isPanning = false;
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     }
 
-    // --- 5. ƒŠƒZƒbƒgˆ— ---
+    // --- 5. ãƒªã‚»ãƒƒãƒˆå‡¦ç† ---
     if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
         ResetView();
         event.reset = true;
@@ -78,7 +77,7 @@ void ImageViewer::Draw(ImTextureID texture)
 {
 	ImVec2 winSize = ImGui::GetContentRegionAvail();
 	ImGui::Image(texture, winSize, uv0, uv1);
-    // ¶ƒNƒŠƒbƒN‚³‚ê‚½uŠÔ
+    // å·¦ã‚¯ãƒªãƒƒã‚¯ã•ã‚ŒãŸç¬é–“
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         mousePressedOnImage = ImGui::IsItemHovered();
     }

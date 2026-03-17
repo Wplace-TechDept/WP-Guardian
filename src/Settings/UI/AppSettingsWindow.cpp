@@ -1,5 +1,8 @@
 #include "AppSettingsWindow.h"
+#include "PlatformUtil.h"
+#ifndef __EMSCRIPTEN__
 #include <windows.h>
+#endif
 namespace Settings
 {
     AppSettingsWindow::AppSettingsWindow(AppSettings settings,GLFWwindow* window, ImFont* bigFont)
@@ -20,8 +23,8 @@ namespace Settings
         float xPos = (windowWidth - itemWidth) * 0.5f;
 
         // imgPath用バッファ（安全に固定長）
-        char imgPathBuf[MAX_PATH] = {};
-        strncpy(imgPathBuf, tempSettings.imgPath.c_str(), MAX_PATH - 1);
+        char imgPathBuf[260] = {};
+        strncpy(imgPathBuf, tempSettings.imgPath.c_str(), 259);
 
         // --- 座標系 ---
         ImGui::SetCursorPosX(xPos);
@@ -107,7 +110,7 @@ namespace Settings
 
         ImGui::PushItemWidth(itemWidth - 80);
         ImGui::SetCursorPosX(xPos);
-        if (ImGui::InputText("##画像保存先", imgPathBuf, MAX_PATH)) {
+        if (ImGui::InputText("##画像保存先", imgPathBuf, 260)) {
             tempSettings.imgPath = std::string(imgPathBuf); // 常に正しい長さでコピー
         }
         ImGui::PopItemWidth();
@@ -115,22 +118,14 @@ namespace Settings
         ImGui::SameLine();
         ImGui::SetCursorPosX(xPos + itemWidth - 80);
         if (ImGui::Button("参照", ImVec2(80, 0))) {
-            OPENFILENAME ofn{};
-            ofn.lStructSize = sizeof(ofn);
+        #ifndef __EMSCRIPTEN__
             HWND hwnd = glfwGetWin32Window(window);
-            ofn.hwndOwner = hwnd;
-            ofn.lpstrFile = imgPathBuf;
-            ofn.nMaxFile = MAX_PATH;
-            ofn.lpstrFilter =
-                "PNG Files\0*.png\0"
-                "JPEG Files\0*.jpg;*.jpeg\0"
-                "All Files\0*.*\0";
-            ofn.nFilterIndex = 1;
-            ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
-
-            if (GetOpenFileName(&ofn)) {
-                tempSettings.imgPath = std::string(imgPathBuf); // 正しい長さでコピー
-            }
+        #else
+            void* hwnd = nullptr;
+        #endif
+            auto path = PlatformUtil::OpenFileDialog(hwnd,
+                "PNG Files\0*.png\0JPEG Files\0*.jpg;*.jpeg\0All Files\0*.*\0");
+            if (!path.empty()) tempSettings.imgPath = path;
         }
 
         ImGui::Spacing();

@@ -2,8 +2,10 @@
 #include "Settings.h"
 #include "imgui.h"
 #include <GLFW/glfw3.h>
+#ifndef __EMSCRIPTEN__
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
+#endif
 
 namespace Settings {
 	class AppSettingsWindow {
