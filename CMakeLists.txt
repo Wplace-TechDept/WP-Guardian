@@ -63,6 +63,18 @@ if(NOT EMSCRIPTEN)
     target_link_libraries(ImageViewer PRIVATE glfw)
 endif()
 
+# ===== ImageFetcher =====
+add_library(ImageFetcher STATIC
+    ${SRC_DIR}/ImageProcessing/ImageFetcher/ImageFetcher.cpp
+    ${SRC_DIR}/ImageProcessing/ImageFetcher/ImageFetcher.h
+)
+target_link_libraries(ImageFetcher PRIVATE
+    ${OpenCV_LIBS}
+)
+if(NOT EMSCRIPTEN)
+    target_link_libraries(ImageFetcher PRIVATE cpr::cpr)
+endif()
+
 # ===== ImageProcessing =====
 add_library(ImageProcessing STATIC
     ${SRC_DIR}/ImageProcessing/ImageProcessing.cpp
@@ -70,11 +82,9 @@ add_library(ImageProcessing STATIC
 )
 target_link_libraries(ImageProcessing PRIVATE
     ${OpenCV_LIBS}
+    ImageFetcher
     Utils
 )
-if(NOT EMSCRIPTEN)
-    target_link_libraries(ImageProcessing PRIVATE cpr::cpr)
-endif()
 
 # ===== VersionManager =====
 add_library(VersionManager STATIC
