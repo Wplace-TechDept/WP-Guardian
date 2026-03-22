@@ -6,6 +6,7 @@
 
 class ImageFetcher {
 public:
+    ~ImageFetcher() { abort_fetch = true; }
     cv::Mat FetchTilesAndCrop(
         int tile_x, int tile_y,
         int x_in_tile, int y_in_tile,
