@@ -1,7 +1,6 @@
 #define NOMINMAX
 
 #include "ImageProcessing.h"
-#include <cpr/cpr.h>
 #include <opencv2/opencv.hpp>
 #include <algorithm>
 
@@ -12,13 +11,13 @@ ImageProcessing::~ImageProcessing() {
 }
 
 void ImageProcessing::SetTileParams(int tileX, int tileY, int pixelX, int pixelY) {
-	this->abort_fetch = true;
+	fetcher.Abort();
     std::scoped_lock lock(settingsMutex);
     this->tileX = tileX;
     this->tileY = tileY;
     this->pixelX = pixelX;
     this->pixelY = pixelY;
-	this->abort_fetch = false;
+    fetcher.Reset();
 }
 void ImageProcessing::SetDiffPattern(const DiffPattern& pattern) {
     std::scoped_lock lock(settingsMutex);
@@ -30,7 +29,7 @@ void ImageProcessing::SetUpdateSpeed(double speed) {
 }
 void ImageProcessing::SetOriginalImage(const cv::Mat& img) {
     int w, h;
-	this->abort_fetch = true;
+    fetcher.Abort();
     {
         std::scoped_lock lock(settingsMutex);
         this->originalImg = img.clone();
@@ -48,7 +47,7 @@ void ImageProcessing::SetOriginalImage(const cv::Mat& img) {
         diffPixels = 0;
         newFrameReady = false;
     }
-	this->abort_fetch = false;
+    fetcher.Reset();
 }
 bool ImageProcessing::fetchOutput(Output& out) {
 	std::scoped_lock lock(outputMutex);
@@ -66,7 +65,7 @@ bool ImageProcessing::fetchOutput(Output& out) {
 
 void ImageProcessing::start() {
     stopThread = false;
-    abort_fetch = false;
+    fetcher.Reset();
 
     worker = std::thread([this]()
         {
@@ -87,7 +86,7 @@ void ImageProcessing::start() {
                     localSpeed = speed;
                     localOriginalImg = originalImg.clone();
                 }
-				cv::Mat newImg = fetch_tiles_and_crop(localTile_x, localTile_y, localPixel_x, localPixel_y, localWidth, localHeight);
+				cv::Mat newImg = fetcher.FetchTilesAndCrop(localTile_x, localTile_y, localPixel_x, localPixel_y, localWidth, localHeight);
                 if (stopThread || newImg.empty()) {
 					std::this_thread::sleep_for(std::chrono::milliseconds(100));
 					continue;
@@ -112,107 +111,10 @@ void ImageProcessing::start() {
 
 void ImageProcessing::stop() {
     stopThread = true;
-    abort_fetch = true;
+    fetcher.Abort();
     if (worker.joinable()) {
         worker.join();
     }
-}
-
-cpr::Response ImageProcessing::cancellable_fetch(const std::string& url, const cpr::Header& headers)
-{
-    try
-    {
-        auto future = cpr::GetAsync(cpr::Url{ url }, headers, cpr::Timeout{ 5000 });
-
-        while (!abort_fetch && future.wait_for(std::chrono::milliseconds(50)) != std::future_status::ready)
-        {
-        }
-
-        if (abort_fetch)
-        {
-            try
-            {
-                //  ߂ l  ϐ  Ɋi [   Ĕj  
-                cpr::Response ignored = future.get();
-                (void)ignored; //      I ɔj  
-            }
-            catch (...)
-            {
-            }
-            return cpr::Response{};
-        }
-
-        return future.get();
-    }
-    catch (...)
-    {
-        return cpr::Response{};
-    }
-}
-
-cv::Mat ImageProcessing::fetch_tiles_and_crop(
-    int tile_x, int tile_y, int x_in_tile, int y_in_tile,
-    int ref_width, int ref_height, int TILE_SIZE)
-{
-    int end_x = x_in_tile + ref_width;
-    int end_y = y_in_tile + ref_height;
-    int tile_x_end = tile_x + (end_x / TILE_SIZE);
-    int tile_y_end = tile_y + (end_y / TILE_SIZE);
-
-    int canvas_w = (tile_x_end - tile_x + 1) * TILE_SIZE;
-    int canvas_h = (tile_y_end - tile_y + 1) * TILE_SIZE;
-    cv::Mat canvas(canvas_h, canvas_w, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-
-    cpr::Header headers = {
-        {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-        {"Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"},
-        {"Referer", "https://www.google.com/"} };
-    
-    int tile_index = 0;
-    for (int ty = tile_y; ty <= tile_y_end; ++ty)
-    {
-        for (int tx = tile_x; tx <= tile_x_end; ++tx)
-        {
-            if (abort_fetch)
-                return cv::Mat();
-            auto now = std::chrono::system_clock::now();
-            auto epoch = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-            std::string url = "https://backend.wplace.live/tile/" + std::to_string(tx) + "/" + std::to_string(ty) + ".png" + "?t=" + std::to_string(epoch);
-            cpr::Response r = ImageProcessing::cancellable_fetch(url, headers);
-            if (abort_fetch)
-                return cv::Mat();
-            if (r.status_code != 200 || r.text.empty())
-                return cv::Mat();
-
-            std::vector<uchar> data(r.text.begin(), r.text.end());
-            cv::Mat img = cv::imdecode(data, cv::IMREAD_UNCHANGED);
-            if (img.empty())
-                return cv::Mat();
-
-            int ty_rel = tile_index / (tile_x_end - tile_x + 1);
-            int tx_rel = tile_index % (tile_x_end - tile_x + 1);
-            int oy = ty_rel * TILE_SIZE;
-            int ox = tx_rel * TILE_SIZE;
-
-            cv::Rect roi_dst(ox, oy, img.cols, img.rows);
-            cv::Rect canvas_rect(0, 0, canvas.cols, canvas.rows);
-            roi_dst &= canvas_rect;
-
-            if (roi_dst.width > 0 && roi_dst.height > 0)
-            {
-                cv::Rect roi_src(0, 0, roi_dst.width, roi_dst.height);
-                img(roi_src).copyTo(canvas(roi_dst));
-            }
-            tile_index++;
-        }
-    }
-
-    cv::Rect roi(x_in_tile, y_in_tile, ref_width, ref_height);
-    cv::Rect canvas_rect(0, 0, canvas.cols, canvas.rows);
-    roi &= canvas_rect;
-    if (roi.width <= 0 || roi.height <= 0)
-        return cv::Mat();
-    return canvas(roi).clone();
 }
 
 std::tuple<cv::Mat, int, int> ImageProcessing::imageDifferenceSafe(
@@ -233,14 +135,12 @@ std::tuple<cv::Mat, int, int> ImageProcessing::imageDifferenceSafe(
     cv::Mat roi1 = img1(roi);
     cv::Mat roi2 = img2(roi);
 
-    //  A   t @ `     l  
     cv::Mat alpha;
     if (roi1.channels() == 4)
         cv::extractChannel(roi1, alpha, 3);
     else
         alpha = cv::Mat::ones(roi.size(), CV_8U) * 255;
 
-    //      v Z
     cv::Mat merged = cv::Mat::zeros(roi.size(), CV_8UC4);
     int changedPixels = 0;
 
