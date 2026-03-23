@@ -1,11 +1,11 @@
 #pragma once
+#include "ImageFetcher/ImageFetcher.h"
 #include "DiffPattern.h"
 #include <thread>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
 #include <opencv2/opencv.hpp>
-#include <cpr/cpr.h>
 
 class ImageProcessing {
 public:
@@ -33,7 +33,8 @@ public:
 private:
     std::thread worker;
     std::atomic<bool> stopThread{ false };
-    std::atomic<bool> abort_fetch{ false };
+    ImageFetcher fetcher;
+
 
     // 設定系(input)
     std::mutex settingsMutex;
@@ -54,10 +55,6 @@ private:
 
 
 private:
-    cpr::Response cancellable_fetch(const std::string& url, const cpr::Header& headers);
-    cv::Mat fetch_tiles_and_crop(
-        int tile_x, int tile_y, int pixel_x, int pixel_y,
-        int ref_width, int ref_height, int TILE_SIZE = 1000);
     std::tuple<cv::Mat, int, int> imageDifferenceSafe(
         const cv::Mat& img1,
         const cv::Mat& img2,
