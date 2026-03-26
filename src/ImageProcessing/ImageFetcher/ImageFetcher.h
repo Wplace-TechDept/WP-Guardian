@@ -1,8 +1,10 @@
 #pragma once
-#include <cpr/cpr.h>
 #include <opencv2/opencv.hpp>
 #include <atomic>
 #include <string>
+#ifndef __EMSCRIPTEN__
+#include <cpr/cpr.h>
+#endif
 
 class ImageFetcher {
 public:
@@ -17,5 +19,8 @@ public:
     void Reset() {abort_fetch = false;}
 private:
     std::atomic<bool> abort_fetch = false;
+
+#ifndef __EMSCRIPTEN__
     cpr::Response CancellableFetch(const std::string& url, const cpr::Header& headers);
+#endif
 };

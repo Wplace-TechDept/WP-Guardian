@@ -1,6 +1,12 @@
 #include "ImageFetcher.h"
 #include <chrono>
+#include <opencv2/imgcodecs.hpp>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/fetch.h>
+#endif
+
+#ifndef __EMSCRIPTEN__
 cpr::Response ImageFetcher::CancellableFetch(const std::string& url, const cpr::Header& headers)
 {
     try
@@ -30,7 +36,7 @@ cpr::Response ImageFetcher::CancellableFetch(const std::string& url, const cpr::
         return cpr::Response{};
     }
 }
-
+#endif
 
 cv::Mat ImageFetcher::FetchTilesAndCrop(
     int tile_x, int tile_y, int x_in_tile, int y_in_tile,
@@ -44,12 +50,12 @@ cv::Mat ImageFetcher::FetchTilesAndCrop(
     int canvas_w = (tile_x_end - tile_x + 1) * TILE_SIZE;
     int canvas_h = (tile_y_end - tile_y + 1) * TILE_SIZE;
     cv::Mat canvas(canvas_h, canvas_w, CV_8UC4, cv::Scalar(0, 0, 0, 0));
-
+#ifndef __EMSCRIPTEN__
     cpr::Header headers = {
         {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
         {"Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"},
         {"Referer", "https://www.google.com/"} };
-    
+#endif
     int tile_index = 0;
     for (int ty = tile_y; ty <= tile_y_end; ++ty)
     {
@@ -60,6 +66,7 @@ cv::Mat ImageFetcher::FetchTilesAndCrop(
             auto now = std::chrono::system_clock::now();
             auto epoch = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
             std::string url = "https://backend.wplace.live/tile/" + std::to_string(tx) + "/" + std::to_string(ty) + ".png" + "?t=" + std::to_string(epoch);
+#ifndef __EMSCRIPTEN__
             cpr::Response r = ImageFetcher::CancellableFetch(url, headers);
             if (abort_fetch)
                 return cv::Mat();
@@ -67,6 +74,21 @@ cv::Mat ImageFetcher::FetchTilesAndCrop(
                 return cv::Mat();
 
             std::vector<uchar> data(r.text.begin(), r.text.end());
+#else
+
+            emscripten_fetch_attr_t attr;
+            emscripten_fetch_attr_init(&attr);
+            strcpy(attr.requestMethod, "GET");
+            attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_SYNCHRONOUS;
+
+            emscripten_fetch_t* fetch = emscripten_fetch(&attr, url.c_str());
+            if (abort_fetch || fetch->status != 200 || fetch->numBytes == 0) {
+                emscripten_fetch_close(fetch);
+                return cv::Mat();
+            }
+            std::vector<uchar> data(fetch->data, fetch->data + fetch->numBytes);
+            emscripten_fetch_close(fetch);
+#endif
             cv::Mat img = cv::imdecode(data, cv::IMREAD_UNCHANGED);
             if (img.empty())
                 return cv::Mat();
