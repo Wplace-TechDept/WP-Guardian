@@ -1,8 +1,9 @@
 #include "VersionManager.h"
-#include <cpr/cpr.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
-
+#ifndef __EMSCRIPTEN__
+#include <cpr/cpr.h>
+#endif
 using json = nlohmann::json;
 
 VersionManager::VersionManager(const std::string& owner, const std::string& repo, const std::string& APP_VERSION)
@@ -19,7 +20,12 @@ VersionManager::Version VersionManager::parseVersion(const std::string& v) {
     return ver;
 }
 
-
+#ifdef __EMSCRIPTEN__
+std::string VersionManager::getLatestVersion() { return ""; }
+VersionManager::UpdateResult VersionManager::checkUpdate() {
+    return UpdateResult{false, APP_VERSION, "", ""};
+}
+#else
 std::string VersionManager::getLatestVersion() {
     std::string url = "https://api.github.com/repos/" + owner + "/" + repo + "/releases/latest";
 
@@ -47,7 +53,7 @@ VersionManager::UpdateResult VersionManager::checkUpdate() {
 
     std::string latest = getLatestVersion();
     if (latest.empty()) {
-        std::cout << "最新バージョン取得失敗" << std::endl;
+        std::cout << "Failed to get latest version" << std::endl;
         return result;
     }
 
@@ -67,6 +73,7 @@ VersionManager::UpdateResult VersionManager::checkUpdate() {
 	return result;
 
 }
+#endif
 bool VersionManager::isNewer(const VersionManager::Version& remote, const VersionManager::Version& local) {
     if (remote.major != local.major) return remote.major > local.major;
     if (remote.minor != local.minor) return remote.minor > local.minor;
