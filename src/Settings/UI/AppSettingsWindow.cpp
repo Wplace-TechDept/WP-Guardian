@@ -1,5 +1,5 @@
 #include "AppSettingsWindow.h"
-#include "PlatformUtil.h"
+#include "Platform/PlatformUtil.h"
 #ifndef __EMSCRIPTEN__
 #include <windows.h>
 #endif

@@ -2,7 +2,7 @@
 #include "SettingsJSON.h"
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include "PathUtil.h"
+#include "Platform/PathUtil.h"
 
 using json = nlohmann::json;
 
@@ -13,7 +13,7 @@ namespace Settings {
             try {
                 json j;
 
-                // SettingsJSON ‚Ì ToJSON ‚ðŽg‚¤
+                // SettingsJSON ï¿½ï¿½ ToJSON ï¿½ï¿½ï¿½gï¿½ï¿½
                 if (!JSON::ToJSON(j, windowStates)) return false;
                 if (!JSON::ToJSON(j, appSettings)) return false;
                 if (!JSON::ToJSON(j, updateCache)) return false;
@@ -39,7 +39,7 @@ namespace Settings {
                 json j;
                 ifs >> j;
 
-                // SettingsJSON ‚Ì FromJSON ‚ðŽg‚¤
+                // SettingsJSON ï¿½ï¿½ FromJSON ï¿½ï¿½ï¿½gï¿½ï¿½
                 if (!JSON::FromJSON(j, windowStates)) return false;
                 if (!JSON::FromJSON(j, appSettings)) return false;
                 if (!JSON::FromJSON(j, updateCache)) return false;
