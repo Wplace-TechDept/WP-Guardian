@@ -21,6 +21,9 @@ namespace PlatformUtil
         ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
         return GetOpenFileNameA(&ofn) ? std::string(buf) : "";
     }
+    inline void OpenWebBrowser(const std::string& url){
+        ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    }
 }
 
 #else
@@ -50,6 +53,10 @@ namespace PlatformUtil
         if (!f) return "";
         fclose(f);
         return "/tmp/selected_file";
+    }
+    inline void OpenWebBrowser(const std::string& url) {
+        std::string script = "window.open('" + url + "', '_blank');";
+        emscripten_run_script(script.c_str());
     }
 }
 #endif

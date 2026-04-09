@@ -30,7 +30,8 @@
 #include "Settings/Core/SettingsJSON.h"
 #include "Settings/UI/AppSettingsWindow.h"
 #include "Settings/UI/UISettingsWindow.h"
-#include "PathUtil.h"
+#include "Utils/Platform/PathUtil.h"
+#include "Utils/Platform/PlatformUtil.h"
 #include "AppState.h"
 
 #ifdef ENABLE_MODULE_SYSTEM
@@ -108,7 +109,7 @@ void showVersionWindow() {
         }
 
         if (ImGui::Button("アップデートページを開く")) {
-            ShellExecuteA(NULL, "open", updateCache.updateURL.c_str(), NULL, NULL, SW_SHOWNORMAL);
+            PlatformUtil::OpenWebBrowser(updateCache.updateURL);
         }
 
         bool hideUpdateMessage = !updateCache.showUpdateMessage;
