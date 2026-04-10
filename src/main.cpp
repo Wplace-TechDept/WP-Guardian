@@ -556,8 +556,7 @@ int main()
             {
                 std::string exePath = PathUtil::GetExePath();
                 cleanup();
-                ShellExecuteA(NULL, "open", exePath.c_str(), NULL, NULL, SW_SHOWDEFAULT);
-                exit(0);
+                PlatformUtil::RestartApp(exePath);
             }
         }
 #endif

@@ -24,6 +24,10 @@ namespace PlatformUtil
     inline void OpenWebBrowser(const std::string& url){
         ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
     }
+    inline void RestartApp(const std::string& exePath) {
+        ShellExecuteA(NULL, "open", exePath.c_str(), NULL, NULL, SW_SHOWDEFAULT);
+        exit(0);
+    }
 }
 
 #else
