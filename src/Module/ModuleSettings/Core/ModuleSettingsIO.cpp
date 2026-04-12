@@ -14,7 +14,7 @@ namespace ModuleSettings
 				json j;
 				if (!JSON::ToJSON(j, moduleSettings)) return false;
 				if (!JSON::ToJSON(j, moduleWindowStates)) return false;
-				std::ofstream ofs(PathUtil::GetExeDir() + "module_settings.json");
+				std::ofstream ofs(PlatformUtil::Path::GetExeDir() + "module_settings.json");
 				if (!ofs.is_open()) return false;
 				ofs << j.dump(4);
 				return true;
@@ -25,7 +25,7 @@ namespace ModuleSettings
 		}
 		bool Load(Settings& moduleSettings, ModuleWindowStates& moduleWindowStates) {
 			try {
-				std::ifstream ifs(PathUtil::GetExeDir() + "module_settings.json");
+				std::ifstream ifs(PlatformUtil::Path::GetExeDir() + "module_settings.json");
 				if (!ifs.is_open()) return false;
 				json j;
 				ifs >> j;

@@ -57,7 +57,7 @@ static Settings::AppSettings appSettings{
     358,                // pixel_y
     4.0f,               // updateSpeed
     DiffPattern{ DiffPatternType::ColorMask, ColorRGBA(0, 1.0f, 0, 1.0f) }, // diffPattern
-    PathUtil::GetExeDir()+"assets\\template.png" // imgPath
+    PlatformUtil::Path::GetExeDir()+"assets\\template.png" // imgPath
 };
 static Settings::UpdateCache updateCache{
     false,              // foundUpdate
@@ -307,7 +307,7 @@ int main()
 	SetupConsoleIfDebug();// デバッグ時にコンソールを開く
 
     // 実行ファイルのディレクトリを取得し、INIファイルの絶対パスを作成
-	std::string appDir = PathUtil::GetExeDir();
+	std::string appDir = PlatformUtil::Path::GetExeDir();
     std::string imguiIniPath = appDir + "imgui.ini";
 	std::cout << "INIファイルのパス: " << imguiIniPath << std::endl;
 
