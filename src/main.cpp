@@ -521,7 +521,7 @@ int main()
 
             if (answer == IDYES)
             {
-                std::string exePath = PathUtil::GetExePath();
+                std::string exePath = PlatformUtil::Path::GetExePath();
                 cleanup();
                 PlatformUtil::RestartApp(exePath);
             }
