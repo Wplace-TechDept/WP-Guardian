@@ -5,8 +5,6 @@
 // --- OpenGL / GLFW ---
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>
 // --- OpenCV ---
 #include <opencv2/opencv.hpp>
 // --- ImGui ---
@@ -147,53 +145,21 @@ void SetupConsoleIfDebug()
 #endif
 }
 
-void setWindowIconFromExe(GLFWwindow* window)
-{
-    HWND hwnd = glfwGetWin32Window(window);
-    if (!hwnd)
-        return;
+void SetAppIcon(GLFWwindow* window, const std::string& iconPath) {
+    // OpenCVを使って画像を読み込む（プロジェクトの既存構成を活かす）
+    cv::Mat img = cv::imread(iconPath, cv::IMREAD_UNCHANGED);
+    if (img.empty()) return;
 
-    char exePath[MAX_PATH];
-    if (!GetModuleFileNameA(NULL, exePath, MAX_PATH))
-        return;
+    // RGBAに変換
+    cv::Mat rgba;
+    cv::cvtColor(img, rgba, cv::COLOR_BGR2RGBA);
 
-    HICON hIconLarge = nullptr, hIconSmall = nullptr;
-    ExtractIconExA(exePath, 0, &hIconLarge, &hIconSmall, 1);
+    GLFWimage images[1];
+    images[0].width = rgba.cols;
+    images[0].height = rgba.rows;
+    images[0].pixels = rgba.data;
 
-    if (!hIconLarge && !hIconSmall)
-        return;
-
-    // --- 大アイコン設定（タスクバー用） ---
-    if (hIconLarge)
-    {
-        int cx = GetSystemMetrics(SM_CXICON);
-        int cy = GetSystemMetrics(SM_CYICON);
-        HICON hLargeCopy = (HICON)CopyImage(hIconLarge, IMAGE_ICON, cx, cy, 0);
-        if (hLargeCopy)
-        {
-            HICON prev = (HICON)SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hLargeCopy);
-            if (prev && prev != hIconSmall)
-                DestroyIcon(prev);
-            // hLargeCopy は OS が参照するのでアプリ終了時に破棄
-        }
-        DestroyIcon(hIconLarge); // ExtractIconExA で得た元ハンドルは破棄
-    }
-
-    // --- 小アイコン設定（タイトルバー用） ---
-    if (hIconSmall)
-    {
-        int cx = GetSystemMetrics(SM_CXSMICON);
-        int cy = GetSystemMetrics(SM_CYSMICON);
-        HICON hSmallCopy = (HICON)CopyImage(hIconSmall, IMAGE_ICON, cx, cy, 0);
-        if (hSmallCopy)
-        {
-            HICON prev = (HICON)SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hSmallCopy);
-            if (prev)
-                DestroyIcon(prev);
-            // hSmallCopy も OS が参照するのでアプリ終了時に破棄
-        }
-        DestroyIcon(hIconSmall);
-    }
+    glfwSetWindowIcon(window, 1, images);
 }
 
 void ensureBGRA(cv::Mat& img)
@@ -321,7 +287,8 @@ int main()
         glfwTerminate();
         return -1;
     }
-    setWindowIconFromExe(window);
+    std::string iconPath = PlatformUtil::Path::GetExeDir() + "assets/app-icon.png";
+    SetAppIcon(window, iconPath);
     glfwMakeContextCurrent(window);
     glewExperimental = GL_TRUE;
     glewInit();
