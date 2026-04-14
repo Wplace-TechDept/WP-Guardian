@@ -72,7 +72,7 @@ target_link_libraries(ImageFetcher PRIVATE
     ${OpenCV_LIBS}
 )
 if(NOT EMSCRIPTEN)
-    target_link_libraries(ImageFetcher PRIVATE cpr::cpr)
+    target_link_libraries(ImageFetcher PUBLIC cpr::cpr)
 endif()
 
 # ===== ImageProcessing =====
