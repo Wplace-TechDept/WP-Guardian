@@ -30,6 +30,7 @@
 #include "Settings/UI/UISettingsWindow.h"
 #include "Utils/Platform/PathUtil.h"
 #include "Utils/Platform/PlatformUtil.h"
+#include "Utils/Platform/FontPath.h"
 #include "AppState.h"
 
 #ifdef ENABLE_MODULE_SYSTEM
@@ -311,8 +312,9 @@ int main()
     ImFontConfig font_cfg{};
     font_cfg.FontDataOwnedByAtlas = true;
 
-    ImFont* font = io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/meiryo.ttc", 18.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
-    ImFont* bigFont = io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/meiryo.ttc", 25.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
+    std::string fontPath = PlatformUtil::Path::GetFontPath();
+    ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
+    ImFont* bigFont = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 25.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
     if (!font)
         std::cerr << "フォント読み込み失敗\n";
     if (!bigFont)
