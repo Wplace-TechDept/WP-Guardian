@@ -1,36 +1,36 @@
 #pragma once
 #include <string>
-#ifndef __EMSCRIPTEN__
-#include <windows.h>
+
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
+    #include <windows.h>
+#endif
 
 namespace PlatformUtil
 {
     namespace Path
     {
-        inline std::string GetExeDir()
-        {
-            char pathBuf[MAX_PATH];
-            GetModuleFileNameA(NULL, pathBuf, MAX_PATH);
-            std::string fullPath(pathBuf);
-            size_t lastSlash = fullPath.find_last_of("\\/");
-            return fullPath.substr(0, lastSlash + 1);
-        }
         inline std::string GetExePath()
         {
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
             char buf[MAX_PATH];
             GetModuleFileNameA(NULL, buf, MAX_PATH);
             return std::string(buf);
+#else
+            // WASMやLinux（暫定）では空、または適切な実装を後で追加
+            return "";
+#endif
+        }
+
+        inline std::string GetExeDir()
+        {
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
+            std::string fullPath = GetExePath();
+            size_t lastSlash = fullPath.find_last_of("\\/");
+            if (lastSlash == std::string::npos) return "";
+            return fullPath.substr(0, lastSlash + 1);
+#else
+            return "";
+#endif
         }
     }
 }
-#else
-// WASM版: ファイルシステムの概念がないためスタブ
-namespace PlatformUtil
-{
-    namespace Path
-    {
-        inline std::string GetExeDir() { return ""; }
-        inline std::string GetExePath() { return ""; }
-    }
-}
-#endif
