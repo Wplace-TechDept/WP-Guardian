@@ -28,6 +28,21 @@ namespace PlatformUtil
         ShellExecuteA(NULL, "open", exePath.c_str(), NULL, NULL, SW_SHOWDEFAULT);
         exit(0);
     }
+    inline void SetupDebugConsole() {
+#if defined(_WIN32) && defined(_DEBUG)
+        AllocConsole();
+
+        FILE* fp;
+        freopen_s(&fp, "CONOUT$", "w", stdout);
+        freopen_s(&fp, "CONOUT$", "w", stderr);
+
+        // UTF-8 コードページに変更
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
+
+        std::cout << u8"[デバッグ] コンソールを開きました！" << std::endl;
+#endif
+    }
 }
 
 #else
@@ -61,6 +76,8 @@ namespace PlatformUtil
     inline void OpenWebBrowser(const std::string& url) {
         std::string script = "window.open('" + url + "', '_blank');";
         emscripten_run_script(script.c_str());
+    }
+    inline void SetupDebugConsole() {
     }
 }
 #endif

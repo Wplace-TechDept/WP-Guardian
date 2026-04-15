@@ -128,24 +128,6 @@ void showVersionWindow() {
     }
 }
 
-void SetupConsoleIfDebug()
-{
-#ifdef _DEBUG
-    AllocConsole();
-
-    FILE* fp;
-    freopen_s(&fp, "CONOUT$", "w", stdout);
-    freopen_s(&fp, "CONOUT$", "w", stderr);
-
-    // UTF-8 コードページに変更
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
-
-
-    std::cout << u8"[デバッグ] コンソールを開きました！" << std::endl;
-#endif
-}
-
 void SetAppIcon(GLFWwindow* window, const std::string& iconPath) {
     // OpenCVを使って画像を読み込む（プロジェクトの既存構成を活かす）
     cv::Mat img = cv::imread(iconPath, cv::IMREAD_UNCHANGED);
@@ -271,7 +253,7 @@ static bool SafeUploadTexture(GLuint texID, int w, int h, const cv::Mat& mat)
 
 int main()
 {
-	SetupConsoleIfDebug();// デバッグ時にコンソールを開く
+	PlatformUtil::SetupDebugConsole();// デバッグ時にコンソールを開く
 
     // 実行ファイルのディレクトリを取得し、INIファイルの絶対パスを作成
 	std::string appDir = PlatformUtil::Path::GetExeDir();
