@@ -1,8 +1,4 @@
-﻿#define NOMINMAX // min/maxマクロの競合を回避
-// --- Windows / Winsock ---
-#include <winsock2.h>   // 先に読む
-#include <windows.h>    // Windows API
-// --- OpenGL / GLFW ---
+﻿// --- OpenGL / GLFW ---
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 // --- OpenCV ---
