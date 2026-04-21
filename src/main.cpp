@@ -499,11 +499,8 @@ int main()
         }
 #ifdef ENABLE_MODULE_SYSTEM
         if (moduleSystem.needsRestart()) {
-            int answer = MessageBoxW(NULL,
-                L"設定を反映するにはアプリを再起動します。\n再起動しますか？",
-                L"再起動", MB_YESNO | MB_ICONQUESTION);
-
-            if (answer == IDYES)
+            // PlatformUtil を使って抽象化
+            if (PlatformUtil::ShowYesNoDialog("再起動", "設定を反映するにはアプリを再起動します。\n再起動しますか？")) 
             {
                 std::string exePath = PlatformUtil::Path::GetExePath();
                 cleanup();
