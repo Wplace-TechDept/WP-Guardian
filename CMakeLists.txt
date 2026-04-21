@@ -43,14 +43,20 @@ set(IMGUI_SRC
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
-# ===== Utils =====
-add_library(Utils INTERFACE
+add_library(Utils STATIC
+    ${SRC_DIR}/Utils/Platform/PlatformUtil.cpp
+)
+target_sources(Utils INTERFACE
     ${SRC_DIR}/Utils/DiffPattern.h
     ${SRC_DIR}/Utils/JsonUtil.h
+    ${SRC_DIR}/Utils/Platform/FontPath.h
     ${SRC_DIR}/Utils/Platform/PathUtil.h
     ${SRC_DIR}/Utils/Platform/PlatformUtil.h
 )
-target_include_directories(Utils INTERFACE ${SRC_DIR}/Utils)
+target_include_directories(Utils PUBLIC ${SRC_DIR}/Utils)
+if(NOT EMSCRIPTEN)
+    target_link_libraries(Utils PRIVATE glfw)
+endif()
 
 # ===== ImageViewer =====
 add_library(ImageViewer STATIC

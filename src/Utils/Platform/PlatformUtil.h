@@ -63,48 +63,8 @@ namespace PlatformUtil
 #endif
     }
 
-    // --- 4. ファイルダイアログ (スタブ/実装) ---
-#ifdef __EMSCRIPTEN__
-    EM_ASYNC_JS(void, waitForFileSelect, (), {
-        await new Promise((resolve) => {
-            var input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.png,.jpg,.jpeg';
-            input.onchange = async function(e) {
-                var file = e.target.files[0];
-                if (!file) { resolve(); return; }
-                var data = await file.arrayBuffer();
-                FS.writeFile('/tmp/selected_file', new Uint8Array(data));
-                resolve();
-            };
-            input.oncancel = function() { resolve(); };
-            input.click();
-        });
-    });
-#endif
+    std::string OpenFileDialog(void* nativeWindow, const char* filter);
 
-    inline std::string OpenFileDialog(void* nativeWindow, const char* filter) {
-#if defined(_WIN32)
-        char buf[512] = {};
-        OPENFILENAMEA ofn{};
-        ofn.lStructSize = sizeof(ofn);
-        ofn.hwndOwner = (HWND)nativeWindow;
-        ofn.lpstrFile = buf;
-        ofn.nMaxFile = sizeof(buf);
-        ofn.lpstrFilter = filter;
-        ofn.nFilterIndex = 1;
-        ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
-        return GetOpenFileNameA(&ofn) ? std::string(buf) : "";
-#elif defined(__EMSCRIPTEN__)
-        waitForFileSelect();
-        FILE* f = fopen("/tmp/selected_file", "rb");
-        if (!f) return "";
-        fclose(f);
-        return "/tmp/selected_file";
-#else
-        return "";
-#endif
-    }
     inline bool ShowYesNoDialog(const std::string& title, const std::string& message) {
 #if defined(_WIN32) && !defined(__EMSCRIPTEN__)
         // Windows: Wide版APIに変換して渡す（文字化け防止）
