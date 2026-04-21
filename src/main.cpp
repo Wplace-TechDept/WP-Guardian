@@ -11,7 +11,6 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
-#include <nlohmann/json.hpp>
 #include <vector>
 #include <cstring>
 // --- 自作ヘッダ ---
@@ -21,7 +20,6 @@
 #include "ImageViewer/ImageViewer.h"
 #include "Settings/Core/Settings.h"
 #include "Settings/Core/SettingsIO.h"
-#include "Settings/Core/SettingsJSON.h"
 #include "Settings/UI/AppSettingsWindow.h"
 #include "Settings/UI/UISettingsWindow.h"
 #include "Utils/Platform/PathUtil.h"
@@ -33,7 +31,6 @@
 #include "Module/ModuleSystem.h"
 #endif
 
-using json = nlohmann::json;
 
 // アプリバージョン
 const std::string APP_VERSION = "v3.0.2"; //バージョン更新時にかならず書き換える
