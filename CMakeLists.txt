@@ -311,6 +311,7 @@ if(EMSCRIPTEN)
         -sFULL_ES3=1
         -sALLOW_MEMORY_GROWTH=1
         -sASYNCIFY=1
+        -sFETCH=1
         --preload-file ${CMAKE_SOURCE_DIR}/assets@assets
     )
 endif()
