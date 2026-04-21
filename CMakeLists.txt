@@ -46,7 +46,9 @@ set(IMGUI_SRC
 # ===== Utils =====
 add_library(Utils INTERFACE
     ${SRC_DIR}/Utils/DiffPattern.h
-    ${SRC_DIR}/Utils/PathUtil.h
+    ${SRC_DIR}/Utils/JsonUtil.h
+    ${SRC_DIR}/Utils/Platform/PathUtil.h
+    ${SRC_DIR}/Utils/Platform/PlatformUtil.h
 )
 target_include_directories(Utils INTERFACE ${SRC_DIR}/Utils)
 

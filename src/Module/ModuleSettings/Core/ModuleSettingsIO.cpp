@@ -2,7 +2,7 @@
 #include "ModuleSettingsJSON.h"
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include "PathUtil.h"
+#include "Platform/PathUtil.h"
 
 using json = nlohmann::json;
 
@@ -12,10 +12,9 @@ namespace ModuleSettings
 		bool Save(const Settings& moduleSettings, const ModuleWindowStates& moduleWindowStates) {
 			try {
 				json j;
-				// ModuleSettingsJSON ‚Ì ToJSON ‚ðŽg‚¤
 				if (!JSON::ToJSON(j, moduleSettings)) return false;
 				if (!JSON::ToJSON(j, moduleWindowStates)) return false;
-				std::ofstream ofs(PathUtil::GetExeDir() + "module_settings.json");
+				std::ofstream ofs(PlatformUtil::Path::GetExeDir() + "module_settings.json");
 				if (!ofs.is_open()) return false;
 				ofs << j.dump(4);
 				return true;
@@ -26,11 +25,10 @@ namespace ModuleSettings
 		}
 		bool Load(Settings& moduleSettings, ModuleWindowStates& moduleWindowStates) {
 			try {
-				std::ifstream ifs(PathUtil::GetExeDir() + "module_settings.json");
+				std::ifstream ifs(PlatformUtil::Path::GetExeDir() + "module_settings.json");
 				if (!ifs.is_open()) return false;
 				json j;
 				ifs >> j;
-				// ModuleSettingsJSON ‚Ì FromJSON ‚ðŽg‚¤
 				if (!JSON::FromJSON(j, moduleSettings)) return false;
 				JSON::FromJSON(j, moduleWindowStates);
 				return true;

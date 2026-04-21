@@ -1,12 +1,6 @@
-﻿#define NOMINMAX // min/maxマクロの競合を回避
-// --- Windows / Winsock ---
-#include <winsock2.h>   // 先に読む
-#include <windows.h>    // Windows API
-// --- OpenGL / GLFW ---
+﻿// --- OpenGL / GLFW ---
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>
 // --- OpenCV ---
 #include <opencv2/opencv.hpp>
 // --- ImGui ---
@@ -30,7 +24,9 @@
 #include "Settings/Core/SettingsJSON.h"
 #include "Settings/UI/AppSettingsWindow.h"
 #include "Settings/UI/UISettingsWindow.h"
-#include "PathUtil.h"
+#include "Utils/Platform/PathUtil.h"
+#include "Utils/Platform/PlatformUtil.h"
+#include "Utils/Platform/FontPath.h"
 #include "AppState.h"
 
 #ifdef ENABLE_MODULE_SYSTEM
@@ -56,7 +52,7 @@ static Settings::AppSettings appSettings{
     358,                // pixel_y
     4.0f,               // updateSpeed
     DiffPattern{ DiffPatternType::ColorMask, ColorRGBA(0, 1.0f, 0, 1.0f) }, // diffPattern
-    PathUtil::GetExeDir()+"assets\\template.png" // imgPath
+    PlatformUtil::Path::GetExeDir()+"assets/template.png" // imgPath
 };
 static Settings::UpdateCache updateCache{
     false,              // foundUpdate
@@ -108,7 +104,7 @@ void showVersionWindow() {
         }
 
         if (ImGui::Button("アップデートページを開く")) {
-            ShellExecuteA(NULL, "open", updateCache.updateURL.c_str(), NULL, NULL, SW_SHOWNORMAL);
+            PlatformUtil::OpenWebBrowser(updateCache.updateURL);
         }
 
         bool hideUpdateMessage = !updateCache.showUpdateMessage;
@@ -128,71 +124,21 @@ void showVersionWindow() {
     }
 }
 
-void SetupConsoleIfDebug()
-{
-#ifdef _DEBUG
-    AllocConsole();
+void SetAppIcon(GLFWwindow* window, const std::string& iconPath) {
+    // OpenCVを使って画像を読み込む（プロジェクトの既存構成を活かす）
+    cv::Mat img = cv::imread(iconPath, cv::IMREAD_UNCHANGED);
+    if (img.empty()) return;
 
-    FILE* fp;
-    freopen_s(&fp, "CONOUT$", "w", stdout);
-    freopen_s(&fp, "CONOUT$", "w", stderr);
+    // RGBAに変換
+    cv::Mat rgba;
+    cv::cvtColor(img, rgba, cv::COLOR_BGR2RGBA);
 
-    // UTF-8 コードページに変更
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
+    GLFWimage images[1];
+    images[0].width = rgba.cols;
+    images[0].height = rgba.rows;
+    images[0].pixels = rgba.data;
 
-
-    std::cout << u8"[デバッグ] コンソールを開きました！" << std::endl;
-#endif
-}
-
-void setWindowIconFromExe(GLFWwindow* window)
-{
-    HWND hwnd = glfwGetWin32Window(window);
-    if (!hwnd)
-        return;
-
-    char exePath[MAX_PATH];
-    if (!GetModuleFileNameA(NULL, exePath, MAX_PATH))
-        return;
-
-    HICON hIconLarge = nullptr, hIconSmall = nullptr;
-    ExtractIconExA(exePath, 0, &hIconLarge, &hIconSmall, 1);
-
-    if (!hIconLarge && !hIconSmall)
-        return;
-
-    // --- 大アイコン設定（タスクバー用） ---
-    if (hIconLarge)
-    {
-        int cx = GetSystemMetrics(SM_CXICON);
-        int cy = GetSystemMetrics(SM_CYICON);
-        HICON hLargeCopy = (HICON)CopyImage(hIconLarge, IMAGE_ICON, cx, cy, 0);
-        if (hLargeCopy)
-        {
-            HICON prev = (HICON)SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hLargeCopy);
-            if (prev && prev != hIconSmall)
-                DestroyIcon(prev);
-            // hLargeCopy は OS が参照するのでアプリ終了時に破棄
-        }
-        DestroyIcon(hIconLarge); // ExtractIconExA で得た元ハンドルは破棄
-    }
-
-    // --- 小アイコン設定（タイトルバー用） ---
-    if (hIconSmall)
-    {
-        int cx = GetSystemMetrics(SM_CXSMICON);
-        int cy = GetSystemMetrics(SM_CYSMICON);
-        HICON hSmallCopy = (HICON)CopyImage(hIconSmall, IMAGE_ICON, cx, cy, 0);
-        if (hSmallCopy)
-        {
-            HICON prev = (HICON)SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hSmallCopy);
-            if (prev)
-                DestroyIcon(prev);
-            // hSmallCopy も OS が参照するのでアプリ終了時に破棄
-        }
-        DestroyIcon(hIconSmall);
-    }
+    glfwSetWindowIcon(window, 1, images);
 }
 
 void ensureBGRA(cv::Mat& img)
@@ -303,10 +249,10 @@ static bool SafeUploadTexture(GLuint texID, int w, int h, const cv::Mat& mat)
 
 int main()
 {
-	SetupConsoleIfDebug();// デバッグ時にコンソールを開く
+	PlatformUtil::SetupDebugConsole();// デバッグ時にコンソールを開く
 
     // 実行ファイルのディレクトリを取得し、INIファイルの絶対パスを作成
-	std::string appDir = PathUtil::GetExeDir();
+	std::string appDir = PlatformUtil::Path::GetExeDir();
     std::string imguiIniPath = appDir + "imgui.ini";
 	std::cout << "INIファイルのパス: " << imguiIniPath << std::endl;
 
@@ -320,7 +266,8 @@ int main()
         glfwTerminate();
         return -1;
     }
-    setWindowIconFromExe(window);
+    std::string iconPath = PlatformUtil::Path::GetExeDir() + "assets/app-icon.png";
+    SetAppIcon(window, iconPath);
     glfwMakeContextCurrent(window);
     glewExperimental = GL_TRUE;
     glewInit();
@@ -343,8 +290,9 @@ int main()
     ImFontConfig font_cfg{};
     font_cfg.FontDataOwnedByAtlas = true;
 
-    ImFont* font = io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/meiryo.ttc", 18.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
-    ImFont* bigFont = io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/meiryo.ttc", 25.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
+    std::string fontPath = PlatformUtil::Path::GetFontPath();
+    ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
+    ImFont* bigFont = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 25.0f, &font_cfg, io.Fonts->GetGlyphRangesJapanese());
     if (!font)
         std::cerr << "フォント読み込み失敗\n";
     if (!bigFont)
@@ -547,16 +495,12 @@ int main()
         }
 #ifdef ENABLE_MODULE_SYSTEM
         if (moduleSystem.needsRestart()) {
-            int answer = MessageBoxW(NULL,
-                L"設定を反映するにはアプリを再起動します。\n再起動しますか？",
-                L"再起動", MB_YESNO | MB_ICONQUESTION);
-
-            if (answer == IDYES)
+            // PlatformUtil を使って抽象化
+            if (PlatformUtil::ShowYesNoDialog("再起動", "設定を反映するにはアプリを再起動します。\n再起動しますか？")) 
             {
-                std::string exePath = PathUtil::GetExePath();
+                std::string exePath = PlatformUtil::Path::GetExePath();
                 cleanup();
-                ShellExecuteA(NULL, "open", exePath.c_str(), NULL, NULL, SW_SHOWDEFAULT);
-                exit(0);
+                PlatformUtil::RestartApp(exePath);
             }
         }
 #endif

@@ -4,7 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <filesystem>
-#include "PathUtil.h"
+#include "Platform/PathUtil.h"
 
 ModuleManager::ModuleManager(const std::string& path)
 {
@@ -12,7 +12,7 @@ ModuleManager::ModuleManager(const std::string& path)
         moduleListPath = path;
     }
     else {
-        moduleListPath = PathUtil::GetExeDir() + path;
+        moduleListPath = PlatformUtil::Path::GetExeDir() + path;
     }
 }
 
