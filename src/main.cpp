@@ -56,7 +56,7 @@ static Settings::AppSettings appSettings{
     358,                // pixel_y
     4.0f,               // updateSpeed
     DiffPattern{ DiffPatternType::ColorMask, ColorRGBA(0, 1.0f, 0, 1.0f) }, // diffPattern
-    PlatformUtil::Path::GetExeDir()+"assets\\template.png" // imgPath
+    PlatformUtil::Path::GetExeDir()+"assets/template.png" // imgPath
 };
 static Settings::UpdateCache updateCache{
     false,              // foundUpdate
