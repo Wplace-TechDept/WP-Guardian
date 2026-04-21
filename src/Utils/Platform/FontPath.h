@@ -9,7 +9,7 @@ namespace PlatformUtil
         {
 #ifdef __EMSCRIPTEN__
             // WASM: Emscriptenの仮想ディレクトリ
-            return "/assets/fonts/meiryo.ttc";
+            return "/assets/fonts/NotoSansCJK.otf";
 #elif defined(_WIN32)
             // Windows: システムフォントパス
             return "C:/Windows/Fonts/meiryo.ttc";

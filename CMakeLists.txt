@@ -362,7 +362,20 @@ add_custom_command(TARGET WP_Guardian POST_BUILD
         "$<TARGET_FILE_DIR:WP_Guardian>/"
     VERBATIM
 )
-
+if(EMSCRIPTEN)
+    file(DOWNLOAD
+        "https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"
+        "${CMAKE_SOURCE_DIR}/assets/fonts/NotoSansCJK.otf"
+        SHOW_PROGRESS
+    )
+endif()
+if(NOT EMSCRIPTEN)
+    add_custom_command(TARGET WP_Guardian POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "$<TARGET_FILE_DIR:WP_Guardian>/assets/fonts"
+        VERBATIM
+    )
+endif()
 if(ENABLE_MODULE_SYSTEM)
     add_custom_command(TARGET WP_Guardian POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
