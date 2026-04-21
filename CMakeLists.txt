@@ -5,7 +5,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 cmake_policy(SET CMP0148 NEW)
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
-
+if(EMSCRIPTEN)
+    add_compile_options(-pthread)
+    add_link_options(-pthread)
+endif()
 option(ENABLE_MODULE_SYSTEM "Enable WebSocket module system" ON)
 
 # ディレクトリ指定
@@ -305,6 +308,7 @@ if(EMSCRIPTEN)
     set_target_properties(WP_Guardian PROPERTIES
         SUFFIX ".html"
     )
+    target_compile_options(WP_Guardian PRIVATE -pthread)
     target_link_options(WP_Guardian PRIVATE
         -sUSE_GLFW=3
         -sUSE_WEBGL2=1
@@ -312,6 +316,7 @@ if(EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -sASYNCIFY=1
         -sFETCH=1
+        -pthread
         --preload-file ${CMAKE_SOURCE_DIR}/assets@assets
     )
 endif()
